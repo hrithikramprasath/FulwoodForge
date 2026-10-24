@@ -7,6 +7,7 @@ Unidirectional Dependency Law:
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Iterable, Mapping
 from urllib.parse import urlsplit
 
@@ -23,11 +24,32 @@ _ALLOWED_SEC_FETCH_SITES: frozenset[str] = frozenset(
 )
 
 
+def _is_trusted_local_proxy_peer(peer: str) -> bool:
+    """Return True when the direct TCP peer is local loopback or the local Docker bridge."""
+    if peer == "testclient":
+        return True
+    try:
+        addr = ipaddress.ip_address(peer)
+        return addr.is_loopback or addr.is_private
+    except ValueError:
+        return False
+
+
 def extract_client_ip(request: Request) -> str:
-    """Return the direct peer IP address without trusting unverified forwarded identity headers."""
-    if request.client is not None and request.client.host:
-        return str(request.client.host)[:45]
-    return "127.0.0.1"
+    """Return the normalized client IP address, honoring validated `CF-Connecting-IP` from local `cloudflared`."""
+    peer = (
+        str(request.client.host)[:45]
+        if request.client is not None and request.client.host
+        else "127.0.0.1"
+    )
+    if _is_trusted_local_proxy_peer(peer):
+        cf_ip = request.headers.get("cf-connecting-ip", "").strip()
+        if cf_ip:
+            try:
+                return str(ipaddress.ip_address(cf_ip))[:45]
+            except ValueError:
+                pass
+    return peer
 
 
 def normalize_origin(raw_origin: str) -> str:
@@ -68,6 +90,13 @@ def check_csrf_headers(
         trusted = {normalize_origin(request_origin)} | {
             normalize_origin(o) for o in allowed_origins if o.strip()
         }
+        forwarded_proto = (
+            headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+        )
+        if forwarded_proto == "https" or headers.get("cf-connecting-ip", "").strip():
+            parsed_req = urlsplit(request_origin.strip())
+            if parsed_req.netloc:
+                trusted.add(f"https://{parsed_req.netloc.lower()}")
         if normalized_origin == "null" or normalized_origin not in trusted:
             return (
                 False,

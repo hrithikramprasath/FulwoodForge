@@ -232,6 +232,48 @@ class NativeSessionAuthentication(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("CSRF", reason)
 
+        # Behind Cloudflare Tunnel (local http:// upstream with X-Forwarded-Proto: https),
+        # same-host https:// Origin succeeds while cross-host Origin is still rejected.
+        ok_cf, _ = security.check_csrf_headers(
+            method="POST",
+            headers={
+                "origin": "https://forge.example.org",
+                "x-forwarded-proto": "https",
+                "cf-connecting-ip": "203.0.113.42",
+            },
+            request_origin="http://forge.example.org",
+        )
+        self.assertTrue(ok_cf)
+
+        bad_cf, _ = security.check_csrf_headers(
+            method="POST",
+            headers={
+                "origin": "https://attacker.org",
+                "x-forwarded-proto": "https",
+                "cf-connecting-ip": "203.0.113.42",
+            },
+            request_origin="http://forge.example.org",
+        )
+        self.assertFalse(bad_cf)
+
+    def test_cloudflare_tunnel_client_ip_extraction(self) -> None:
+        reg = self.client.post(
+            "/api/auth/register",
+            headers={"CF-Connecting-IP": "198.51.100.77"},
+            json={"username": "teacher_cf", "password": "ValidPassword!2026"},
+        )
+        self.assertEqual(reg.status_code, 201)
+        self.assertEqual(self.store.audit_events[-1][3].ip_address, "198.51.100.77")
+
+        # Malformed CF-Connecting-IP falls back safely to peer IP
+        reg_bad = self.client.post(
+            "/api/auth/register",
+            headers={"CF-Connecting-IP": "not-a-valid-ip-address"},
+            json={"username": "teacher_cf2", "password": "ValidPassword!2026"},
+        )
+        self.assertEqual(reg_bad.status_code, 201)
+        self.assertEqual(self.store.audit_events[-1][3].ip_address, "testclient")
+
 
 class ApplicationIntegration(unittest.TestCase):
     """Exercise middleware, native session auth, route dispatch, and real worker exports together."""
