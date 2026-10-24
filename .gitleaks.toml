@@ -1,0 +1,19 @@
+title = "Fulwood Forge Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow synthetic unit-test password fixtures in test suites"
+regexTarget = "match"
+regexes = [
+  '''TempPass-12345678''',
+  '''Abcd1234Efgh5678''',
+  '''temporary-test-password''',
+  '''one-time-test-password''',
+]
+paths = [
+  '''^frontend/src/__tests__/''',
+  '''^backend/tests/''',
+  '''^deploy/tests/''',
+]

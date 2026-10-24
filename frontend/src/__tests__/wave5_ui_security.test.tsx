@@ -403,7 +403,7 @@ describe("ForcedPasswordChangeModal", () => {
 
     await user.type(
       screen.getByLabelText("Temporary password"),
-      "TempPass-12345678",
+      "temporary-test-password",
     );
     await user.type(screen.getByLabelText("New password"), "my-new-password-1");
     await user.type(
@@ -413,8 +413,8 @@ describe("ForcedPasswordChangeModal", () => {
     await user.click(screen.getByRole("button", { name: "Update password" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(mocked.auth.changePassword).toHaveBeenCalledWith({
-      current_password: "TempPass-12345678",
-      new_password: "my-new-password-1",
+      current_password: "temporary-test-password", // gitleaks:allow
+      new_password: "my-new-password-1", // gitleaks:allow
     });
   });
 });
@@ -533,7 +533,7 @@ describe("AdminDashboard", () => {
     mocked.admin.resetPassword.mockResolvedValue({
       user_uuid: "u-2",
       username: "pending1",
-      temporary_password: "Abcd1234Efgh5678",
+      temporary_password: "one-time-test-password", // gitleaks:allow
       sessions_revoked: 1,
       must_change_password: true,
     });
@@ -562,7 +562,7 @@ describe("AdminDashboard", () => {
       await screen.findByRole("button", { name: /Issue temporary password/ }),
     );
     expect(await screen.findByTestId("temporary-password")).toHaveTextContent(
-      "Abcd1234Efgh5678",
+      "one-time-test-password",
     );
   });
 
