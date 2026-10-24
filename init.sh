@@ -31,7 +31,7 @@ fi
 if [[ ! -d frontend/renderer/node_modules ]]; then
   npm --prefix frontend/renderer ci --omit=dev --no-audit --no-fund
 fi
-uv sync --project backend --quiet
+uv sync --project backend --frozen --quiet
 
 echo "[Stage 1] Formatting Check..."
 uvx ruff format --check backend deploy
@@ -43,8 +43,9 @@ uvx bandit -r backend/app deploy -ll -q
 npm --prefix frontend run lint -- --max-warnings=0
 
 echo "[Stage 3] Strict Compiler Type Check..."
-uv run --project backend mypy --strict --ignore-missing-imports backend/app backend/tests
+uv run --project backend mypy --strict --ignore-missing-imports backend/app backend/tests deploy
 npx --prefix frontend tsc -p frontend/tsconfig.app.json --noEmit
+npx --prefix frontend tsc -p frontend/tsconfig.node.json --noEmit
 
 echo "[Stage 4] Secret, Host Leak, Purple Palette & Emoji Scan..."
 if git grep -nE "(AIza[0-9A-Za-z_-]{35}|GOCSPX-[0-9A-Za-z_-]{28}|\.ts\.net|/home/hr1th1krr)" -- ':!init.sh' ':!AGENTS.md' ':!SPEC.md' ':!deploy/stage_audit.py' ':!.github/workflows/ci.yml'; then

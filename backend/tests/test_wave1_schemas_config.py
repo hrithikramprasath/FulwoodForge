@@ -330,11 +330,17 @@ class TestFailClosedConfig:
         }
 
     def test_load_config_succeeds_for_valid_production_env(self) -> None:
-        cfg = load_config(self._valid_prod_env())
+        env = self._valid_prod_env()
+        env["CORS_ORIGINS"] = "https://forge.example.org, https://admin.example.org"
+        cfg = load_config(env)
         assert cfg.app_env == "production"
         assert cfg.bootstrap_admin_username == "fulwood_admin"
         assert cfg.session_cookie_secure is True
         assert cfg.session_cookie_name == "ff_session"
+        assert cfg.cors_origins == (
+            "https://forge.example.org",
+            "https://admin.example.org",
+        )
 
     def test_load_config_fails_closed_on_missing_mysql_password_in_prod(self) -> None:
         env = self._valid_prod_env()

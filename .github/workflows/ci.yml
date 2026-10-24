@@ -8,9 +8,13 @@ on:
     - cron: '20 6 * * *'
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   secrets:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read # Gitleaks lists commits when scanning a pull request.
@@ -24,6 +28,7 @@ jobs:
   verify:
     name: 7-stage verification pipeline
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -34,11 +39,13 @@ jobs:
             frontend/package-lock.json
             frontend/renderer/package-lock.json
       - name: Install uv
-        run: python3 -m pip install --user uv && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Install backend dependencies
-        run: uv sync --project backend
-      - name: Install Chromium and system libraries for PDF export tests
-        run: uv run --project backend playwright install --with-deps chromium
+        run: (python3 -m pip install --user --break-system-packages uv || pipx install uv) && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install backend dependencies (locked)
+        run: uv sync --project backend --frozen
+      - name: Install Google Chrome and configure sandbox for PDF export tests
+        run: |
+          uv run --project backend playwright install --with-deps chrome
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - name: Install Pandoc
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pandoc poppler-utils
       - name: Install frontend and renderer dependencies
@@ -58,8 +65,9 @@ jobs:
           npm --prefix frontend run lint -- --max-warnings=0
       - name: "Stage 3 - Strict types"
         run: |
-          uv run --project backend mypy --strict --ignore-missing-imports backend/app backend/tests
+          uv run --project backend mypy --strict --ignore-missing-imports backend/app backend/tests deploy
           npx --prefix frontend tsc -p frontend/tsconfig.app.json --noEmit
+          npx --prefix frontend tsc -p frontend/tsconfig.node.json --noEmit
       - name: "Stage 4 - Secret, host leak, palette and emoji scan"
         run: |
           if git grep -nE "(AIza[0-9A-Za-z_-]{35}|GOCSPX-[0-9A-Za-z_-]{28}|\.ts\.net|/home/hr1th1krr)" -- ':!init.sh' ':!AGENTS.md' ':!SPEC.md' ':!deploy/stage_audit.py' ':!.github/workflows/ci.yml'; then
@@ -79,13 +87,17 @@ jobs:
           npm --prefix frontend run build
       - name: Dependency audit
         run: |
+          uv export --project backend --no-hashes --no-emit-project --all-groups | uvx pip-audit -r /dev/stdin
           npm --prefix frontend audit --audit-level=high
           npm --prefix frontend/renderer audit --omit=dev --audit-level=high
   container:
-    needs: verify
+    needs: [secrets, verify]
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Validate Docker Compose configuration
+        run: docker compose --env-file .env.example config --quiet
       - name: Maintenance rollback regressions
         run: python3 -m unittest discover -s deploy/tests -v
       - name: Build locked runtime with fresh OS and Chrome

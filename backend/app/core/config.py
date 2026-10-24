@@ -8,6 +8,7 @@ or insecure cookie settings raise `RuntimeError` immediately at startup.
 from __future__ import annotations
 
 import os
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +70,11 @@ class AppConfig:
     bootstrap_admin_username: str
     bootstrap_admin_password: str
     artifacts_dir: Path
+    cors_origins: tuple[str, ...] = (
+        "http://localhost:8000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    )
 
 
 def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
@@ -94,7 +100,7 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         maximum=65535,
         name="MYSQL_PORT",
     )
-    mysql_user = source.get("MYSQL_USER", "fulwood").strip() or "fulwood"
+    mysql_user = source.get("MYSQL_USER", "fulwood_app").strip() or "fulwood_app"
     mysql_password = source.get("MYSQL_PASSWORD", "")
     mysql_database = (
         source.get("MYSQL_DATABASE", "fulwood_forge").strip() or "fulwood_forge"
@@ -145,11 +151,19 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
     bootstrap_admin_username = raw_admin_user.lower()
     bootstrap_admin_password = source.get("BOOTSTRAP_ADMIN_PASSWORD", "")
 
+    default_artifacts = str(Path(tempfile.gettempdir()) / "artifacts")
     artifacts_dir_str = (
-        source.get("ARTIFACTS_DIR", "/app/data/artifacts").strip()
-        or "/app/data/artifacts"
+        source.get("ARTIFACTS_DIR", default_artifacts).strip() or default_artifacts
     )
     artifacts_dir = Path(artifacts_dir_str)
+
+    raw_cors = source.get("CORS_ORIGINS", "")
+    parsed_cors = tuple(o.strip() for o in raw_cors.split(",") if o.strip())
+    cors_origins = parsed_cors or (
+        "http://localhost:8000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    )
 
     if app_env == "production":
         if not mysql_password.strip():
@@ -186,4 +200,5 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         bootstrap_admin_username=bootstrap_admin_username,
         bootstrap_admin_password=bootstrap_admin_password,
         artifacts_dir=artifacts_dir,
+        cors_origins=cors_origins,
     )

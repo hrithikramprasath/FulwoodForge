@@ -1,19 +1,22 @@
-# Keep the build context small and never bake local state into the image.
+# Keep the build context small and never bake local state or secrets into the image.
+.git
+.github
+.agents
+.secrets/
+**/.env*
 **/node_modules
 **/dist
 **/.venv
 **/__pycache__
 **/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
 **/.vite
-.git
-.claude
-**/.env
 **/*.db
-**/.impeccable
-docs
-progress
-project_details
-
-.secrets/
-**/.env*
-!**/.env.example
+**/*.sqlite*
+*.tar
+*.log
+claude-progress.txt
+features.json
+init.sh
+docker-compose.yml

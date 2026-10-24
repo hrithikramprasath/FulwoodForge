@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify the live Fulwood Forge stack's native health, auth status, and RFC 9457 auth gate.
 
-Designed to be called from deploy/daily-rebuild.sh, deploy/monthly-rebuild.sh,
+Designed to be called from deploy/maintenance.sh, deploy/monthly-rebuild.sh,
 and systemd ExecStartPost: exits 0 only if every check passes, non-zero otherwise.
 
 The three invariants checked are:
@@ -43,7 +43,7 @@ Fetcher = Callable[[str, str], tuple[int, dict[str, str], bytes]]
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Stop urllib from following 3xx responses."""
 
-    def redirect_request(  # type: ignore[override]
+    def redirect_request(
         self,
         req: urllib.request.Request,
         fp: object,

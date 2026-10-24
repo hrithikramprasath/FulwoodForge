@@ -101,7 +101,7 @@ def make_test_config(*, cookie_secure: bool = True) -> AppConfig:
     return AppConfig(
         app_env="development",
         gemini_api_key="test-gemini-api-key-wave4",
-        gemini_model="gemini-2.5-flash",
+        gemini_model="gemini-3.5-flash-lite",
         mysql_host="127.0.0.1",
         mysql_port=3306,
         mysql_user="fulwood_app",
@@ -1164,7 +1164,7 @@ def build_in_memory_runtime(
         )
         return GeminiGenerationResult(
             content=content,
-            model_name="gemini-2.5-flash",
+            model_name="gemini-3.5-flash-lite",
             prompt_tokens=420,
             candidate_tokens=880,
             total_tokens=1300,
@@ -1626,7 +1626,7 @@ def test_generate_idempotency_lessons_crud_idor_403_and_export() -> None:
                 task_type=req.task_type,
                 subject=req.subject,
             ),
-            model_name="gemini-2.5-flash",
+            model_name="gemini-3.5-flash-lite",
             prompt_tokens=300,
             candidate_tokens=600,
             total_tokens=900,
@@ -1981,3 +1981,9 @@ def test_docker_compose_mysql_84_and_oauth2_proxy_removed() -> None:
     assert "./deploy/chrome-seccomp.json" in compose_raw
     assert "seccomp-chrome.json" not in compose_raw
     assert "SYS_CHROOT" in app_svc.get("cap_add", [])
+    assert app_svc["image"] == "fulwood-forge:latest"
+    for svc_name in ("mysql", "app"):
+        svc_logging = services[svc_name].get("logging", {})
+        assert svc_logging.get("driver") == "json-file"
+        assert svc_logging.get("options", {}).get("max-size") == "10m"
+        assert svc_logging.get("options", {}).get("max-file") == "3"

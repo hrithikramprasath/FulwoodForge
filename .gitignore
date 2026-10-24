@@ -26,13 +26,14 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Runtime data — local artifact directories, never commit
+# Runtime data & build archives — never commit
 artifacts/
-data/
-download/
+*.tar
+*.log
+.coverage
+coverage/
+htmlcov/
 
 # Local developer / agent tooling
-.impeccable/
-.mcp.json
-lazygit
 .agents/
+.mcp.json

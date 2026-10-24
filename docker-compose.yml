@@ -33,11 +33,16 @@ services:
       start_period: 25s
     networks:
       - internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   app:
     build: .
     init: true
-    image: fulwood-forge:local
+    image: fulwood-forge:latest
     restart: unless-stopped
     depends_on:
       mysql:
@@ -87,6 +92,11 @@ services:
       start_period: 15s
     networks:
       - internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   mysql_data:

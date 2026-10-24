@@ -211,6 +211,18 @@ class NativeSessionAuthentication(unittest.TestCase):
         )
         self.assertEqual(same_origin.status_code, 204)
 
+        # Re-login and verify an origin configured in AppConfig.cors_origins is permitted
+        relogin = self.client.post(
+            "/api/auth/login",
+            json={"username": "teacher_csrf", "password": "ValidPassword!2026"},
+        )
+        self.assertEqual(relogin.status_code, 200)
+        configured_origin = self.client.post(
+            "/api/auth/logout",
+            headers={"Origin": "http://localhost:5173"},
+        )
+        self.assertEqual(configured_origin.status_code, 204)
+
     def test_unit_csrf_helper_rejects_mismatched_origin(self) -> None:
         ok, reason = security.check_csrf_headers(
             method="POST",
@@ -235,7 +247,7 @@ class ApplicationIntegration(unittest.TestCase):
                     task_type=req.task_type,
                     subject=req.subject,
                 ),
-                model_name="gemini-2.5-flash",
+                model_name="gemini-3.5-flash-lite",
                 prompt_tokens=250,
                 candidate_tokens=500,
                 total_tokens=750,

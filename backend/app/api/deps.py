@@ -85,11 +85,7 @@ def verify_request_csrf(request: Request, *, has_cookie: bool) -> None:
     if not has_cookie:
         return
     container: RuntimeContainer | None = getattr(request.app.state, "container", None)
-    allowed_origins = (
-        container.config.cors_origins
-        if container is not None and hasattr(container.config, "cors_origins")
-        else ()
-    )
+    allowed_origins = container.config.cors_origins if container is not None else ()
     request_origin = f"{request.url.scheme}://{request.url.netloc}"
     ok, reason = check_csrf_headers(
         method=request.method,

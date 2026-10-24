@@ -1,11 +1,12 @@
-"""Per-user and global rate limiting and concurrency controls (`REQ-SEC-03` / `VULN-03`).
+"""Per-user sliding-window rate limiting (`REQ-SEC-03` / `VULN-03`).
 
-Provides:
-- `KeyedSlidingWindow`: Per-user (`user_id: int` or `str`) sliding-window rate limiter
-  with configurable per-call limit override (`user.hourly_generation_limit` for generations,
-  `20/min` for exports) so one user can never exhaust the school-wide quota.
-- `SlidingWindow`, `generate_limit`, `export_limit`, `export_slot`: Preserved for
-  backward-compatible endpoint/test callers until Wave 4 rewires HTTP dependencies.
+Provides `KeyedSlidingWindow` (`user_generation_limiter` and `user_export_limiter`),
+scoping rate limits by authenticated `user_id` with configurable per-call limit overrides
+(`user.hourly_generation_limit` for generations, `20/min` for exports) so one user can
+never exhaust the school-wide quota.
+
+Unidirectional Dependency Law:
+- Imports ONLY from Python standard library (zero `fastapi` or `starlette` imports).
 """
 
 from __future__ import annotations
@@ -14,10 +15,7 @@ import os
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
-
-from fastapi import HTTPException, status
+from collections.abc import Callable
 
 
 def _int_env(name: str, default: int) -> int:
@@ -27,31 +25,6 @@ def _int_env(name: str, default: int) -> int:
         return v if v > 0 else default
     except (TypeError, ValueError):
         return default
-
-
-class SlidingWindow:
-    """Allow `limit` events per `seconds`, measured over a true sliding window."""
-
-    def __init__(self, limit: int, seconds: float, what: str) -> None:
-        self.limit = limit
-        self.seconds = seconds
-        self.what = what
-        self._hits: deque[float] = deque()
-        self._lock = threading.Lock()
-
-    def check(self) -> None:
-        now = time.monotonic()
-        with self._lock:
-            while self._hits and now - self._hits[0] >= self.seconds:
-                self._hits.popleft()
-            if len(self._hits) >= self.limit:
-                retry = max(1, int(self.seconds - (now - self._hits[0])) + 1)
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Too many {self.what} requests — try again in {retry}s.",
-                    headers={"Retry-After": str(retry)},
-                )
-            self._hits.append(now)
 
 
 class KeyedSlidingWindow:
@@ -109,21 +82,6 @@ class KeyedSlidingWindow:
             bucket.append(now)
             return True, 0
 
-    def check(
-        self,
-        key: int | str,
-        *,
-        limit_override: int | None = None,
-    ) -> None:
-        """Check quota for `key` and raise `HTTPException(429)` if exceeded."""
-        allowed, retry_after = self.check_and_record(key, limit_override=limit_override)
-        if not allowed:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Too many {self.what} requests — try again in {retry_after}s.",
-                headers={"Retry-After": str(retry_after)},
-            )
-
     def reset(self, key: int | str | None = None) -> None:
         """Clear rate-limit history for a single `key` or all keys."""
         with self._lock:
@@ -133,40 +91,9 @@ class KeyedSlidingWindow:
                 self._buckets.pop(key, None)
 
 
-_generate = SlidingWindow(_int_env("GENERATE_PER_HOUR", 30), 3600.0, "generation")
-_export = SlidingWindow(_int_env("EXPORT_PER_MINUTE", 20), 60.0, "export")
-
 user_generation_limiter = KeyedSlidingWindow(
     _int_env("GENERATE_PER_HOUR", 30), 3600.0, "generation"
 )
 user_export_limiter = KeyedSlidingWindow(
     _int_env("EXPORT_PER_MINUTE", 20), 60.0, "export"
 )
-
-_EXPORT_SLOTS = threading.BoundedSemaphore(_int_env("EXPORT_CONCURRENCY", 2))
-_EXPORT_WAIT_S = float(_int_env("EXPORT_QUEUE_WAIT_S", 30))
-
-
-def generate_limit() -> None:
-    """FastAPI dependency — bounds Gemini spend."""
-    _generate.check()
-
-
-def export_limit() -> None:
-    """FastAPI dependency — bounds export request rate."""
-    _export.check()
-
-
-@contextmanager
-def export_slot() -> Iterator[None]:
-    """Hold one of the few concurrent-export slots, or 503 rather than OOM the box."""
-    if not _EXPORT_SLOTS.acquire(timeout=_EXPORT_WAIT_S):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="The server is busy building other files — try again in a moment.",
-            headers={"Retry-After": "30"},
-        )
-    try:
-        yield
-    finally:
-        _EXPORT_SLOTS.release()

@@ -108,7 +108,7 @@ def _make_config() -> AppConfig:
     return AppConfig(
         app_env="development",
         gemini_api_key="test-gemini-api-key-wave3",
-        gemini_model="gemini-2.5-flash",
+        gemini_model="gemini-3.5-flash-lite",
         mysql_host="127.0.0.1",
         mysql_port=3306,
         mysql_user="fulwood",

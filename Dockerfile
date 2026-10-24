@@ -38,8 +38,7 @@ COPY backend/ ./
 COPY --from=web /app/frontend/renderer/render.mjs /app/frontend/renderer/render.mjs
 COPY --from=renderer /renderer/node_modules /app/frontend/renderer/node_modules
 COPY --from=web /app/frontend/dist /app/frontend/dist
-RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
-    && mkdir -p /app/data && chown appuser:appuser /app/data
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser
 EXPOSE 8000
 USER appuser
 CMD ["sh", "-c", "umask 077; mkdir -p /tmp/artifacts; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --no-server-header"]
