@@ -1,0 +1,104 @@
+name: Build and security checks
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '20 6 * * *'
+permissions:
+  contents: read
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # Gitleaks lists commits when scanning a pull request.
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with: {fetch-depth: 0}
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+  verify:
+    name: 7-stage verification pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            frontend/renderer/package-lock.json
+      - name: Install uv
+        run: python3 -m pip install --user uv && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Install backend dependencies
+        run: uv sync --project backend
+      - name: Install Chromium and system libraries for PDF export tests
+        run: uv run --project backend playwright install --with-deps chromium
+      - name: Install Pandoc
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pandoc poppler-utils
+      - name: Install frontend and renderer dependencies
+        run: |
+          npm --prefix frontend ci --no-audit --no-fund
+          npm --prefix frontend/renderer ci --omit=dev --no-audit --no-fund
+      - name: "Stage 0 - Harness and canary"
+        run: ./init.sh --harness-only
+      - name: "Stage 1 - Formatting"
+        run: |
+          uvx ruff format --check backend deploy
+          npm --prefix frontend run format:check
+      - name: "Stage 2 - Lint and SAST"
+        run: |
+          uvx ruff check backend deploy
+          uvx bandit -r backend/app deploy -ll -q
+          npm --prefix frontend run lint -- --max-warnings=0
+      - name: "Stage 3 - Strict types"
+        run: |
+          uv run --project backend mypy --strict --ignore-missing-imports backend/app backend/tests
+          npx --prefix frontend tsc -p frontend/tsconfig.app.json --noEmit
+      - name: "Stage 4 - Secret, host leak, palette and emoji scan"
+        run: |
+          if git grep -nE "(AIza[0-9A-Za-z_-]{35}|GOCSPX-[0-9A-Za-z_-]{28}|\.ts\.net|/home/hr1th1krr)" -- ':!init.sh' ':!AGENTS.md' ':!SPEC.md' ':!deploy/stage_audit.py' ':!.github/workflows/ci.yml'; then
+            echo "Hardcoded credential or host leak detected" >&2
+            exit 1
+          fi
+          python3 deploy/stage_audit.py hygiene
+      - name: "Stage 5 - Unidirectional import audit"
+        run: python3 deploy/stage_audit.py imports
+      - name: "Stage 6 - Anti-reward-hacking test audit"
+        run: python3 deploy/stage_audit.py tests
+      - name: "Stage 7 - Full test suites and production build"
+        run: |
+          python3 -m unittest discover -s deploy/tests -v
+          uv run --project backend pytest backend/tests -v
+          npm --prefix frontend test -- --run
+          npm --prefix frontend run build
+      - name: Dependency audit
+        run: |
+          npm --prefix frontend audit --audit-level=high
+          npm --prefix frontend/renderer audit --omit=dev --audit-level=high
+  container:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Maintenance rollback regressions
+        run: python3 -m unittest discover -s deploy/tests -v
+      - name: Build locked runtime with fresh OS and Chrome
+        run: docker build --pull --no-cache -t fulwood-forge:ci .
+      - name: Verify real sandbox, API guards and all export formats
+        run: deploy/verify-image.sh fulwood-forge:ci
+      - name: Scan image for fixable high and critical vulnerabilities
+        run: |
+          docker save -o /tmp/image.tar fulwood-forge:ci
+          chmod 600 /tmp/image.tar
+          docker run --rm --cap-drop ALL --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" \
+            -v /tmp/image.tar:/image.tar:ro \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
+            --cache-dir /tmp/trivy-cache image --input /image.tar --scanners vuln --ignore-unfixed \
+            --severity HIGH,CRITICAL --exit-code 1

@@ -1,0 +1,118 @@
+# Fulwood Forge — Autonomous Engineering Progress Ledger (`claude-progress.txt`)
+
+## [2026-10-16T23:25:00+01:00] — Wave 0: Specification & Harness Restoration (COMPLETED)
+- **Status:** COMPLETE (`passes: true`)
+- **Constraint Enforcement:** Zero `.py`, `.ts`, `.tsx`, `.mjs`, or `.css` application source files modified.
+- **Completed Deliverables:**
+  1. `AGENTS.md` (90 lines, strictly < 150 lines) & `CLAUDE.md`: Locked the 7-stage cost-ordered verification pipeline, unidirectional import law (`Types -> Config -> Repository -> Service -> Runtime/Controller -> UI`), and 3-tier boundary protocol (`ALWAYS DO`, `ASK FIRST`, `NEVER DO`).
+  2. `SPEC.md`: Locked the Master EARS Specification v2.0.0 covering:
+     - Native username + Argon2id password authentication (zero Google OAuth / `oauth2-proxy` / email dependencies).
+     - Registration abuse gate (`INVITE_ONLY` default with `invite_codes`, `ADMIN_APPROVAL`, `OPEN`) and `ff_session` `HttpOnly; Secure; SameSite=Lax` database-backed sessions.
+     - Admin Control Center (`/admin`) with bootstrap admin, one-time temporary password resets (`must_change_password = 1`), user suspension/approval, per-user hourly quota controls, platform visibility toggles, and live usage/audit telemetry.
+     - Dual-plane logging: single-line structured JSON `stdout` logger + relational MySQL `audit_events` and `token_ledger` (`DECIMAL(19,4) NOT NULL`).
+     - Complete 9-table MySQL 8.4 LTS (`InnoDB`, `utf8mb4_0900_ai_ci`) 3NF schema with `BIGINT UNSIGNED AUTO_INCREMENT` PKs, `BINARY(16)` RFC 9562 `UUIDv7` public IDs, and composite keyset pagination indexes.
+     - Mandatory EARS remediations for all 11 audit vulnerabilities (`VULN-01` through `VULN-11`), RFC 9457 `application/problem+json` error contracts, and Anti-Vibe 5-State UI tokens.
+  3. `features.json`: Initialized wave ledger tracking Waves 0–6.
+  4. `init.sh`: Created executable 7-stage verification runner.
+- **Next Session Entrypoint:** Proceed to **Wave 1: Types, Config & Structured Logger**.
+
+## [2026-10-16T23:47:00+01:00] — Wave 1: Types, Config & Structured Logger (COMPLETED)
+- **Status:** COMPLETE (`passes: true`)
+- **Constraint Enforcement:** Unidirectional import law strictly enforced (`Types -> Config -> Logger`); zero edits to `backend/app/services/**`, `backend/app/api/**`, `backend/app/main.py`, or React `.tsx` components.
+- **Completed Deliverables:**
+  1. `backend/pyproject.toml` & `frontend/package.json`: Added authorized runtime and dev dependencies (`argon2-cffi`, `asyncmy`, `cryptography`, `pytest`, `pytest-asyncio`, `ruff`, `mypy`, `bandit`, `dompurify`, `@types/dompurify`, `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `jsdom`, `prettier`).
+  2. `backend/app/core/uuid_v7.py`: Implemented RFC 9562 `UUIDv7` 16-byte (`BINARY(16)`) and 36-char string generator/validator with thread-safe within-millisecond monotonic counter (`rand_a`) and `UUIDv4` rejection.
+  3. `backend/app/schemas/content.py`: Closed `VULN-09` (`REQ-SEC-09`) with strict `SubjectLiteral` and `ExamBoardLiteral` allowlists on `TeacherRequest` (`GenerateRequest`), removed emoji from `ModelStep.examiner_tip`, and achieved 100% `mypy --strict` compliance.
+  4. `backend/app/schemas/problem_details.py`: Implemented IETF RFC 9457 `ProblemDetails` (`serialization_alias="invalid-params"`, `application/problem+json` media type) and `build_problem_details()` helper (`REQ-API-01`).
+  5. `backend/app/schemas/auth.py` & `backend/app/schemas/admin.py`: Implemented strict Pydantic v2 models (`extra="forbid"`) for native username/Argon2id auth (`REQ-AUTH-01`..`06`), invite codes, admin password reset, system settings, audit events, and `Decimal("0.0001")`-quantized token/cost telemetry (`REQ-ADMIN-01`..`02`, `REQ-LOG-02`..`03`).
+  6. `backend/app/core/config.py`: Implemented frozen `AppConfig` and fail-closed `load_config()` defaulting to `app_env="production"` and raising `RuntimeError` on missing `MYSQL_PASSWORD` / `GEMINI_API_KEY`, weak bootstrap admin password (`< 12` chars), invalid admin username, or `SESSION_COOKIE_SECURE=false`.
+  7. `backend/app/core/logging.py`: Implemented single-line UTC microsecond ISO-8601 `StructuredJsonFormatter` with `request_id_ctx`, `user_id_ctx`, and `username_ctx` correlation (`REQ-LOG-01`).
+  8. `frontend/src/types/content.ts`, `frontend/src/schemas/content.ts`, & `frontend/src/schemas/form.ts`: Synchronized TypeScript interfaces and Zod schemas with backend contracts.
+  9. `backend/tests/test_wave1_schemas_config.py`: Added 22 unit tests verifying `UUIDv7` monotonicity, `VULN-09` prompt-injection rejection, `REQ-AUTH-01` username/password rules, RFC 9457 `invalid-params` serialization, fail-closed `AppConfig`, and single-line JSON logging.
+- **Next Session Entrypoint:** Proceed to **Wave 2: MySQL 8.4 Schema & Async Repositories**.
+
+## [2026-10-17T09:40:00+01:00] — Wave 2: MySQL 8.4 Schema & Async Repositories (COMPLETED)
+- **Status:** COMPLETE (`passes: true`)
+- **Constraint Enforcement:** Unidirectional import law strictly enforced (`backend/app/db/**` and `backend/app/repositories/**` import zero symbols from `app.services`, `app.api`, `app.main`, or `fastapi`); 100% parameterized `%s` SQL queries with zero dynamic string interpolation inside `execute()`.
+- **Completed Deliverables:**
+  1. `backend/migrations/0001_initial_schema.up.sql` & `0001_initial_schema.down.sql`: Implemented reversible DDL for all 9 MySQL 8.4 LTS tables (`system_settings`, `users`, `user_sessions`, `invite_codes`, `lesson_generations`, `artifacts`, `idempotency_keys`, `token_ledger`, `audit_events`) enforcing `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`, `BIGINT UNSIGNED AUTO_INCREMENT` surrogate PKs, `BINARY(16)` RFC 9562 `UUIDv7` public identifiers, `DECIMAL(19,4) NOT NULL` monetary accounting, `DATETIME(6)` UTC timestamps, explicit foreign keys, and composite keyset pagination indexes (`(created_at DESC, id DESC)`).
+  2. `backend/app/db/` (`errors.py`, `pool.py`, `migrator.py`, `__init__.py`): Implemented typed MySQL exception classification (`DatabaseError`, `TransientDatabaseError` for errnos `1205`/`1213`/SQLSTATE `40001`, `UniqueConstraintViolationError` for errno `1062`), bounded `AsyncDatabasePool` (`connection()`, `transaction()`, `ping()`), and reversible `MigrationRunner`.
+  3. `backend/app/repositories/` (`base.py`, `system_settings_repo.py`, `users_repo.py`, `sessions_repo.py`, `invite_codes_repo.py`, `generations_repo.py`, `artifacts_repo.py`, `idempotency_repo.py`, `telemetry_repo.py`, `__init__.py`): Implemented 100% parameterized async repositories with `SELECT ... FOR UPDATE` row locking on invite code redemption and idempotency keys (`REQ-API-02`), composite keyset pagination (`KeysetCursor`, `KeysetPage`), and `DECIMAL(19,4)` token/cost telemetry (`REQ-LOG-02`, `REQ-LOG-03`).
+  4. Deleted `backend/app/services/cache_db.py` (`REQ-SEC-10` / `VULN-10`) and removed all legacy SQLite `cache_db` references from `backend/app/main.py`, `backend/app/services/gemini.py`, and `backend/tests/test_security.py`.
+  5. `backend/tests/test_wave2_mysql_repositories.py`: Added 13 comprehensive tests auditing DDL invariants, AST unidirectional imports & SQL parameterization, SQLite elimination, MySQL error translation, pool/migrator lifecycle, and all 8 repository contracts.
+- **Next Session Entrypoint:** Proceed to **Wave 3: Auth, Admin & Gemini/Export Services**.
+
+## [2026-10-17T10:27:00+01:00] — Wave 3: Auth, Admin & Gemini/Export Services (COMPLETED)
+- **Status:** COMPLETE (`passes: true`)
+- **Constraint Enforcement:** Unidirectional import law strictly enforced (`backend/app/services/**` imports zero symbols from `app.api`, `app.main`, or `fastapi`, and raises zero `HTTPException`s); zero `if __name__ == "__main__":` blocks in `backend/app/services/**` and `backend/app/core/**`; zero edits to `backend/app/api/endpoints.py`, `backend/app/main.py`, or React `.tsx` components.
+- **Completed Deliverables:**
+  1. `backend/app/services/errors.py` & `backend/app/services/retry.py`: Implemented transport-agnostic `ServiceError` hierarchy with IETF RFC 9457 `to_problem_details()` metadata (`401`, `403`, `404`, `409`, `422`, `429`, `502`, `503`) and deterministic 3-attempt exponential backoff (`RETRY_DELAYS_SECONDS = (0.1, 0.2, 0.4)`) restricted strictly to transient failures (`REQ-SEC-07` / `VULN-07`).
+  2. `backend/app/services/auth_service.py`: Implemented native Argon2id (`t=3, m=65536, p=1, len=32, salt=16`) password hashing, constant-time dummy verification on unknown usernames, 5-attempt / 15-minute brute-force lockout (`429 RateLimitExceededError` with `Retry-After: 900`), `INVITE_ONLY` / `ADMIN_APPROVAL` / `OPEN` registration modes, `ff_session` `BINARY(32)` SHA-256 session lifecycle, and `must_change_password` gate (`REQ-AUTH-01`..`06`).
+  3. `backend/app/services/admin_service.py`: Implemented `AdminService` with `ensure_bootstrap_admin`, one-time 16-char temporary password reset (`must_change_password = True` + immediate session revocation), user role/status/quota management with last-admin self-lockout protection (`409 ConflictError`), invite code management, system settings controls, and live overview/audit/token ledger queries (`REQ-ADMIN-01`..`02`).
+  4. `backend/app/services/lesson_service.py`: Implemented `LessonService` enforcing `SystemSettings` maintenance/subject/task allowlists, `Idempotency-Key` `SELECT ... FOR UPDATE` locking and replay (`REQ-API-02`), MySQL generation cache lookup BEFORE per-user hourly rate-limit quota check (`REQ-SEC-03` / `VULN-03`), pure-Python slide count (`REQ-SEC-02`), `DECIMAL(19,4)` token/cost telemetry (`REQ-LOG-03`), and Object-Level Authorization (`403 PermissionDeniedError` IDOR defense) across all saved lessons and exports.
+  5. `backend/app/core/hardening.py`, `backend/app/core/processes.py`, `backend/app/core/limits.py`, `backend/app/core/security.py`: Added `safe_xml_fromstring()` rejecting `<!DOCTYPE>` and `<!ENTITY>` (`REQ-SEC-05` / `VULN-05`), non-blocking `run_worker_async()` with `start_new_session=True` and `os.killpg(..., SIGKILL)` on timeout (`REQ-SEC-06` / `VULN-06`), and per-user `KeyedSlidingWindow` (`REQ-SEC-03` / `VULN-03`).
+  6. `backend/app/services/gemini.py`, `export.py`, `docx_writer.py`, `pptx_writer.py`, `omml.py`, `worker.py`, & `frontend/renderer/render.mjs`: Replaced subprocess slide counting with pure-Python `calculate_slide_count()` (`< 1ms`, `VULN-02`), removed HTTP 200 `_get_fallback_content()` stub (`VULN-04`), isolated system instructions via `GenerateContentConfig(system_instruction=...)` (`VULN-07`), scoped LaTeX escape repair strictly to math delimiters outside code blocks (`VULN-08`), replaced all `parse_xml`/`fromstring` calls with `safe_xml_fromstring` (`VULN-05`), escaped inline `<` and `>` outside math delimiters in `render.mjs`, and stripped all emojis from `docx_writer.py`, `pptx_writer.py`, and `render.mjs` (`VULN-01`).
+  7. `backend/tests/test_wave3_services_security.py`: Added 19 verification tests covering all 8 Wave 3 security and architectural domains.
+- **Next Session Entrypoint:** Proceed to **Wave 4: RFC 9457 Runtime, Controllers & Docker Stack**.
+
+## [2026-10-17T11:25:00+01:00] — Wave 4: RFC 9457 Runtime, Controllers & Docker Stack (COMPLETED)
+- **Status:** COMPLETE (`passes: true`)
+- **Constraint Enforcement:** Unidirectional import law strictly enforced across `backend/app/api/**` and `backend/app/main.py` (`Controller -> Service`; zero controller imports from `backend/app/repositories/**`, `google.genai`, `docx`, `pptx`, or `sqlite3`); zero edits to React `.tsx` or `.css` files in `frontend/src/`.
+- **Completed Deliverables:**
+  1. `backend/app/core/hardening.py` & `backend/app/core/security.py`: Enforced strict `Content-Security-Policy` (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`, `REQ-SEC-01` / `VULN-01`), updated `BodySizeLimitMiddleware` to return `413 application/problem+json` on body size or deadline breach, implemented `RequestContextLogMiddleware` (`UUIDv7` `X-Request-ID` propagation + single-line structured JSON `http_request` logs via `log_event`, `REQ-LOG-01`), and completely eliminated `ProxyAuthMiddleware`, `REQUIRE_PROXY_AUTH`, `UPSTREAM_TOKEN_FILE`, and `X-Forwarded-Email` trust in favor of native `ff_session` cookies and CSRF `Origin` / `Sec-Fetch-Site` validation (`REQ-SEC-04` / `VULN-04`).
+  2. `backend/app/api/deps.py` & `backend/app/api/errors.py`: Implemented `RuntimeContainer`, `get_client_ip`, `require_authenticated_actor`, `require_active_user` (`403 urn:fulwoodforge:error:password-change-required` when `must_change_password=True`, `REQ-AUTH-06`), `require_admin_user`, and global RFC 9457 `application/problem+json` exception handlers covering `ServiceError`, `RequestValidationError`, `ValidationError`, `StarletteHTTPException`, `HTTPException`, `RecursionError`, and unhandled `Exception` (`REQ-API-01`).
+  3. `backend/app/api/auth.py`, `backend/app/api/lessons.py`, `backend/app/api/admin.py`, & `backend/app/api/endpoints.py`: Implemented complete HTTP routers for `/api/auth/*`, `/api/lessons/*` (with Object-Level Authorization / IDOR `403` defense and compiled artifact cache replay), `/api/generate` (with `Idempotency-Key` `16..64` validation and `X-Generation-UUID` / `X-Cache-Hit` headers, `REQ-API-02`), `/api/export/{fmt}` (with per-user `20/min` `user_export_limiter` and non-blocking worker subprocesses), and `/api/admin/*` (`overview`, `users`, `reset-password`, `revoke-sessions`, `invite-codes`, `settings`, `audit-events`, `token-ledger`).
+  4. `backend/app/main.py`: Wired `AsyncDatabasePool`, `MigrationRunner`, `ensure_bootstrap_admin`, and `_periodic_state_purge` inside `lifespan`, added `GET /health/live` and `GET /health/ready` (`503 application/problem+json` when DB unhealthy or draining on `SIGTERM`, `REQ-API-03`), and configured SPA shell routes (`/`, `/login`, `/register`, `/admin`).
+  5. `docker-compose.yml`, `.env.example`, `deploy/**`, `GUIDE.md`, & `SHIP.md`: Added `mysql:8.4` LTS service (`--character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci`) with persistent `mysql_data` volume and healthcheck, removed `oauth2-proxy` (`git rm -f deploy/oauth2-proxy.yaml`), updated `deploy/` scripts and tests for the MySQL 8.4 + native auth stack, and purged all legacy tailnet hostnames and personal home directory paths.
+  6. `backend/tests/test_wave4_runtime_api.py` & `backend/tests/test_security.py`: Added comprehensive Wave 4 runtime/API verification suite and updated `test_security.py` to test native `ff_session` auth, CSRF `Origin` checks, and zero skipped tests.
+- **Next Session Entrypoint:** Proceed to **Wave 5: Anti-Vibe UI, Auth Gate & Admin Dashboard**.
+
+[CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]
+
+
+## [2026-10-24T15:20:00+01:00] - Wave 5: Anti-Vibe UI, Auth Gate & Admin Dashboard (COMPLETED)
+- **Status:** COMPLETE (`passes: true`)
+- **Part 2 delta (Part 1 was committed mid-wave):**
+  1. `frontend/src/App.tsx` rewired from the legacy single-form flow to AuthGate -> ForcedPasswordChangeModal -> StudioWorkspace / AdminDashboard (all network via `lib/api.ts`); removed `src/mocks/` offline sample stub.
+  2. Admin Control Center completed: `AdminDashboard`, `InvitesPanel`, `SettingsPanel`, `AuditPanel` (audit log + token ledger) beside the Part 1 `OverviewRibbon` and `UsersPanel`.
+  3. `lib/sanitize.ts` DOMPurify config typed (`Config`), `render.mjs` emoji regex fixed (lint), `AdaptiveForm` uses `useWatch`, `index.html` loads Plus Jakarta Sans + JetBrains Mono.
+  4. `render.mjs`, `docx_writer.py`, `pptx_writer.py`: unified Oxford Navy `#0F4C81` / Academic Slate `#0F172A` palette (solid navy header, no gradients), spec grid, `[N marks]` tabular badges, I Do two-column table, We Do / You Do tier answers in the answer-key PDF.
+  5. Vitest: `src/__tests__/setup.ts` polyfills + `wave5_ui_security.test.tsx` (15 tests: source scan, XSS, VULN-08, auth, forced password, cancel, admin).
+- **Verification note:** backend tests spawn `python -m app.services.worker` with a minimal env, so run them with `PYTHONPATH=backend` (or from `backend/`); also needs `pyyaml` for test_wave4. Renderer needs `npm --prefix frontend/renderer install`.
+- **Next Session Entrypoint:** Wave 6.
+
+[CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]
+
+## [2026-10-24T15:27:00+01:00] - Wave 6: Final Remediation, CI/CD Lockdown & 7-Stage Release Audit (COMPLETED)
+- **Status:** COMPLETE (`passes: true`); `./init.sh` from repo root exits 0 with zero manual env prefixes; `npm --prefix frontend run build` clean (zero warnings).
+- **Fixes:**
+  1. `core/processes.py`: `_worker_env()` prepends absolute `backend/` to `PYTHONPATH`; `run_worker` and `run_worker_async` use `cwd=backend/`. `pyproject.toml`: `pyyaml` + `types-pyyaml`, `pythonpath = [".", "backend"]`, strict `filterwarnings`; `uv.lock` refreshed.
+  2. Fonts self-hosted via `@fontsource-variable/plus-jakarta-sans` and `@fontsource-variable/jetbrains-mono` (imported in `main.tsx`); Google Fonts links removed from `index.html` (`REQ-SEC-01`).
+  3. `.gitignore` adds `.mypy_cache/` and `frontend/dist/`; `GUIDE.md` emojis removed; `frontend/README.md` purple/MagicSchool text replaced. Dockerfile already installs renderer `node_modules`; `init.sh` installs frontend and renderer deps when missing.
+  4. `.github/workflows/ci.yml`: new `verify` job (uv, Chromium, Pandoc, frontend, renderer) runs all 7 stages; the container job depends on it. No `py_compile`.
+  5. Removed embedded `if __name__ == "__main__":` block from `app/schemas/content.py` (migrated to `tests/test_wave6_schema_boundaries.py`). Added `tests/test_wave6_worker_env.py`, frontend CSP font tests, and `deploy/stage_audit.py` (Stages 4-6).
+  6. Typing: `backend/tests` now passes `mypy --strict`. `vitest` bumped to 5.x (vite 8 type compatibility, fixes `tsc -b`); `vite.config.ts` uses `import.meta.dirname` and vendor chunk splitting.
+- **Verification:** ruff format/check, bandit, eslint, prettier, mypy --strict (app + tests), tsc, Stage 4-6 audits, 87 pytest + deploy unittests, 17 vitest, production build: all exit 0.
+- **Ask-first dependency changes (user-authorized):** pyyaml, types-pyyaml, two fontsource packages. Additionally vitest ^5 version bump (existing devDependency).
+
+[CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]
+
+## [2026-10-24T15:48:00+01:00] - Wave 6.1 Hotfix: Dockerfile & docker-compose.yml Runtime Alignment (COMPLETED)
+- **Status:** COMPLETE (`passes: true`); `./init.sh` from repo root exits 0 across all 7 stages.
+- **Fixes:**
+  1. `Dockerfile`: Added `pandoc` to `apt-get install -y --no-install-recommends` (`REQ-API-03`), removed legacy `REQUIRE_PROXY_AUTH=1`, set `PYTHONPATH="/app/backend"`, `PORT=8000`, `ARTIFACTS_DIR=/tmp/artifacts`, changed `EXPOSE 7860` to `EXPOSE 8000`, and updated `CMD` to run `mkdir -p /tmp/artifacts` before starting `uvicorn`.
+  2. `docker-compose.yml`:
+     - Aligned `SECCOMP_PROFILE_PATH` default to `./deploy/chrome-seccomp.json` (fixing the missing `./deploy/seccomp-chrome.json` host file failure that aborted `docker compose up`), switched `security_opt` to `=` separator (`no-new-privileges=true`, `seccomp=...`), and added `init: true` + `cap_add: [SYS_CHROOT]` required by the Chrome sandbox.
+     - Updated `services.app.tmpfs` mounts to `/tmp:rw,nosuid,size=512m,mode=1777` and `/home/appuser:rw,noexec,nosuid,size=64m,uid=10001,gid=10001,mode=700` matching `HOME=/home/appuser`, and set `PORT: "8000"` and `ARTIFACTS_DIR: "/tmp/artifacts"`.
+     - Removed `read_only: true`, `user: "999:999"`, and `cap_drop: [ALL]` from `services.mysql` so the official `mysql:8.4` (Oracle Linux 9, `uid=27`) entrypoint can initialize `/var/lib/mysql` and `/var/lib/mysql-files` and drop privileges to `mysql`, and updated `mysql` healthcheck to verify `SELECT 1` on `$MYSQL_DATABASE` over TCP.
+  3. `backend/app/db/pool.py` & `backend/app/main.py`: Added bounded startup connection retry (`max_attempts=20, retry_delay_seconds=1.5`) in `AsyncDatabasePool.initialize()` during FastAPI `lifespan` startup.
+  4. `.env.example` & `.env`: Updated `SECCOMP_PROFILE_PATH=./deploy/chrome-seccomp.json` and documented the `>= 12`-char `BOOTSTRAP_ADMIN_PASSWORD` requirement.
+  5. `deploy/chrome-seccomp.json`: Added Linux 5.x/6.x syscalls (`openat2`, `clone3`, `close_range`, `faccessat2`, `fchmodat2`, `epoll_pwait2`, `futex_waitv`, `landlock_*`, `memfd_secret`, `mseal`, `pidfd_*`, `process_madvise`, `process_mrelease`) required by `runc` 1.3+ `libpathrs` (`pathrs_reopen`) and modern glibc so container initialization succeeds without stack overflow under seccomp.
+  6. `backend/tests/test_wave4_runtime_api.py`: Added container alignment and seccomp (`openat2`, `clone3`, `chrome-seccomp.json`, `SYS_CHROOT`) regression assertions in `test_docker_compose_mysql_84_and_oauth2_proxy_removed`.
+  7. Live `docker compose` stack verified: both `fulwoodforge-mysql-1` and `fulwoodforge-app-1` reached `(healthy)` status, applied `0001_initial_schema`, bootstrapped the initial `ADMIN` account, and passed `python3 deploy/check-gate.py http://127.0.0.1:8000` (`[PASS] health_ready`, `[PASS] auth_status`, `[PASS] api_unauth_rejected`).
+  8. Gemini Model & Transaction Error Propagation Fix:
+     - Switched default `GEMINI_MODEL` from retired `gemini-2.5-flash` (which returned HTTP 404 `no longer available to new users`) to `gemini-3.5-flash-lite` across `.env`, `.env.example`, `docker-compose.yml`, `backend/app/core/config.py`, `backend/app/services/gemini.py`, and `backend/app/services/lesson_service.py`.
+     - Updated `backend/app/db/errors.py` (`is_mysql_driver_exception`) and `backend/app/db/pool.py` (`connection()` and `transaction()`) so only MySQL driver/database exceptions are wrapped into `DatabaseError`, while domain `ServiceError` subclasses (`UpstreamGenerationError`, `AuthenticationError`, `RateLimitExceededError`, `ValidationFailedError`, etc.) propagate untouched with their RFC 9457 status codes (`502`, `401`, `429`, `422`).
+     - Explicitly committed failure telemetry (`UPSTREAM_ERROR` in `token_ledger`, `QUOTA_EXCEEDED` / `AUTH_LOGIN_FAILED` / `LOGIN_RATE_LIMITED` in `audit_events`) prior to raising domain errors in `lesson_service.py` and `auth_service.py`.
+
+[CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]

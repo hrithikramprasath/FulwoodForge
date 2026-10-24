@@ -1,0 +1,10 @@
+<!-- Mirrors the header mark in App.tsx. Deliberately no hex values in this
+     comment: naming the superseded ones here made the file grep as though it
+     still used them. The artwork is the accent purple on white; corners are
+     rounded to match the 8px card radius. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#762bfa"/>
+  <rect x="6" y="8" width="17" height="3" rx="1.5" fill="#ffffff"/>
+  <rect x="6" y="14" width="14" height="3" rx="1.5" fill="#ffffff"/>
+  <rect x="6" y="20" width="20" height="3" rx="1.5" fill="#ffffff"/>
+</svg>

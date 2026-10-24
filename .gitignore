@@ -1,0 +1,38 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+.secrets/
+**/.env*
+!**/.env.example
+
+# Node / frontend
+node_modules/
+dist/
+frontend/dist/
+*.local
+*.tsbuildinfo
+
+# Python / backend
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Runtime data — local artifact directories, never commit
+artifacts/
+data/
+download/
+
+# Local developer / agent tooling
+.impeccable/
+.mcp.json
+lazygit
+.agents/

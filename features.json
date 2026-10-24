@@ -1,0 +1,147 @@
+{
+  "project": "FulwoodForge",
+  "version": "2.0.0",
+  "canary": "[CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]",
+  "waves": [
+    {
+      "wave": 0,
+      "title": "Wave 0: Specification & Harness Restoration",
+      "status": "completed",
+      "passes": true,
+      "deliverables": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "SPEC.md",
+        "features.json",
+        "init.sh",
+        "claude-progress.txt"
+      ]
+    },
+    {
+      "wave": 1,
+      "title": "Wave 1: Types, Config & Structured Logger",
+      "status": "completed",
+      "passes": true,
+      "requirements": [
+        "REQ-AUTH-01",
+        "REQ-LOG-01",
+        "REQ-SEC-09",
+        "REQ-API-01"
+      ],
+      "deliverables": [
+        "Strict Literal enums for subject and exam_board in backend/app/schemas/content.py",
+        "Pydantic v2 schemas for Auth, Admin, Invite Codes, System Settings, Audit Events, Token Ledger, and RFC 9457 ProblemDetails",
+        "UUIDv7 RFC 9562 binary(16)/string generator utility",
+        "Single-line structured JSON logger in backend/app/core/logging.py",
+        "Centralized typed configuration in backend/app/core/config.py"
+      ]
+    },
+    {
+      "wave": 2,
+      "title": "Wave 2: MySQL 8.4 Schema & Async Repositories",
+      "status": "completed",
+      "passes": true,
+      "requirements": [
+        "REQ-LOG-02",
+        "REQ-LOG-03",
+        "REQ-SEC-10",
+        "REQ-API-02"
+      ],
+      "deliverables": [
+        "Reversible UP and DOWN SQL migration scripts in backend/migrations/ for all 9 MySQL 8.4 InnoDB tables",
+        "Async MySQL 8.4 connection pool and migration runner",
+        "100% parameterized Repository classes for users, user_sessions, invite_codes, system_settings, lesson_generations, artifacts, idempotency_keys, token_ledger, and audit_events",
+        "Removal of ephemeral SQLite backend/app/services/cache_db.py and _warn_once error silencing"
+      ]
+    },
+    {
+      "wave": 3,
+      "title": "Wave 3: Auth, Admin & Gemini/Export Services",
+      "status": "completed",
+      "passes": true,
+      "requirements": [
+        "REQ-AUTH-02",
+        "REQ-AUTH-03",
+        "REQ-AUTH-04",
+        "REQ-AUTH-05",
+        "REQ-AUTH-06",
+        "REQ-ADMIN-01",
+        "REQ-ADMIN-02",
+        "REQ-SEC-02",
+        "REQ-SEC-03",
+        "REQ-SEC-04",
+        "REQ-SEC-05",
+        "REQ-SEC-06",
+        "REQ-SEC-07"
+      ],
+      "deliverables": [
+        "Argon2id password hashing and session management service (ff_session cookie)",
+        "Bootstrap Admin initializer and Admin Control service (one-time password reset, user approval/suspension, invite codes, quota & visibility toggles)",
+        "Deterministic pure-Python slide counter replacing throwaway PPTX subprocess (VULN-02)",
+        "Per-user rate limiter evaluated after MySQL generation cache lookup (VULN-03)",
+        "safe_xml_fromstring() enforced across docx_writer.py, pptx_writer.py, omml.py, and export.py (VULN-05)",
+        "Non-blocking asyncio.create_subprocess_exec() worker execution (VULN-06)",
+        "Removal of HTTP 200 _get_fallback_content stub and enforcement of 3x (100ms, 200ms, 400ms) retry on 5xx/429 only (VULN-07)",
+        "Zero emojis in pptx_writer.py and frontend/renderer/render.mjs + inline HTML escaping in render.mjs (VULN-01)"
+      ]
+    },
+    {
+      "wave": 4,
+      "title": "Wave 4: RFC 9457 Runtime, Controllers & Docker Stack",
+      "status": "completed",
+      "passes": true,
+      "requirements": [
+        "REQ-SEC-01",
+        "REQ-API-01",
+        "REQ-API-02",
+        "REQ-API-03"
+      ],
+      "deliverables": [
+        "Global RFC 9457 application/problem+json exception handlers in backend/app/main.py",
+        "Strict Content-Security-Policy (script-src 'self', default-src 'self') in SecurityHeadersMiddleware",
+        "Auth, Lesson Library, Generation/Export, and Admin API routers obeying unidirectional dependency rules",
+        "GET /health/live and GET /health/ready probes with graceful SIGTERM draining",
+        "Updated docker-compose.yml with MySQL 8.4 LTS service and removal of oauth2-proxy"
+      ]
+    },
+    {
+      "wave": 5,
+      "title": "Wave 5: Anti-Vibe UI, Auth Gate & Admin Dashboard",
+      "status": "completed",
+      "passes": true,
+      "requirements": [
+        "REQ-SEC-01",
+        "REQ-SEC-08",
+        "REQ-SEC-11"
+      ],
+      "deliverables": [
+        ":root Anti-Vibe CSS Custom Property constitution and tabular-nums in frontend/src/index.css (zero #762bfa purple, zero emojis)",
+        "DOMPurify HTML sanitization and AbortController lifecycle management across all API calls",
+        "View 1: Native Auth Gate (/login, /register with invite code support, Forced Password Change modal)",
+        "View 2: Teacher Split-Pane Curriculum Workspace with Saved Lesson History Library, inline section editing, and complete Answer Key & Mark Scheme rendering (VULN-08)",
+        "View 3: Admin Control Center (/admin) with Overview Telemetry, User & Quota Manager, One-Time Password Reset modal, Invite Code Manager, Platform Visibility Controls, and Live Audit/Token Usage Stream"
+      ]
+    },
+    {
+      "wave": 6,
+      "title": "Wave 6: Full Test Suite & Zero-Warning Audit",
+      "status": "completed",
+      "passes": true,
+      "requirements": [
+        "STAGE-1",
+        "STAGE-2",
+        "STAGE-3",
+        "STAGE-4",
+        "STAGE-5",
+        "STAGE-6",
+        "STAGE-7"
+      ],
+      "deliverables": [
+        "Extraction of embedded if __name__ == '__main__': blocks from services into backend/tests/ pytest modules",
+        "Comprehensive backend pytest suite covering Argon2id auth, RBAC/IDOR, invite gate, admin password reset, RFC 9457 errors, slide counter, and all 5 document exports",
+        "Frontend Vitest + React Testing Library suite covering Auth Gate, AdaptiveForm, ResultView Answer Key, DOMPurify XSS defense, and Admin Dashboard",
+        "Updated .github/workflows/ci.yml running all 7 verification stages with zero errors and zero warnings"
+      ]
+    }
+  ]
+}

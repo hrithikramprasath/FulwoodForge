@@ -1,0 +1,19 @@
+# Keep the build context small and never bake local state into the image.
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.vite
+.git
+.claude
+**/.env
+**/*.db
+**/.impeccable
+docs
+progress
+project_details
+
+.secrets/
+**/.env*
+!**/.env.example
