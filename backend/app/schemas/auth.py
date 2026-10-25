@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -20,6 +20,46 @@ RegistrationMode = Literal["INVITE_ONLY", "ADMIN_APPROVAL", "OPEN"]
 
 USERNAME_REGEX = r"^[a-zA-Z0-9_.-]{3,32}$"
 USERNAME_PATTERN = re.compile(USERNAME_REGEX)
+
+_COMMON_BREACHED_PASSWORDS: Final[frozenset[str]] = frozenset(
+    {
+        "password123",
+        "password1234",
+        "password12345",
+        "password123456",
+        "1234567890",
+        "12345678901",
+        "123456789012",
+        "qwerty12345",
+        "qwertyuiop1",
+        "letmein1234",
+        "welcome1234",
+        "admin12345",
+        "admin123456",
+        "iloveyou123",
+        "monkey12345",
+        "dragon12345",
+        "football123",
+    }
+)
+
+
+def validate_password_not_breached(password: str, username: str | None = None) -> str:
+    """Reject common breached passwords, low-entropy repetitions, and passwords containing username."""
+    if (
+        password.strip().lower() in _COMMON_BREACHED_PASSWORDS
+        or len(set(password.lower())) <= 2
+    ):
+        raise ValueError(
+            "Password appears in known breached password lists; choose a stronger passphrase."
+        )
+    if (
+        username is not None
+        and len(username.strip()) >= 3
+        and username.strip().lower() in password.lower()
+    ):
+        raise ValueError("Password must not contain your username.")
+    return password
 
 
 def validate_username_format(raw: str) -> tuple[str, str]:
@@ -93,6 +133,11 @@ class RegisterRequest(BaseModel):
             return None
         return v.strip().upper()
 
+    @model_validator(mode="after")
+    def _validate_password(self) -> RegisterRequest:
+        validate_password_not_breached(self.password, self.username)
+        return self
+
 
 class ChangePasswordRequest(BaseModel):
     """Payload posted to `POST /api/auth/change-password` (`REQ-AUTH-06`)."""
@@ -106,6 +151,7 @@ class ChangePasswordRequest(BaseModel):
     def _ensure_password_rotated(self) -> ChangePasswordRequest:
         if self.new_password == self.current_password:
             raise ValueError("New password must differ from the current password.")
+        validate_password_not_breached(self.new_password)
         return self
 
 
