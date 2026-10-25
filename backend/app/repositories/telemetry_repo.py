@@ -67,6 +67,14 @@ WHERE event_type = 'LOGIN_FAILED'
   AND JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.username')) = %s
 """
 
+_COUNT_IP_FAILED_LOGINS_SINCE_SQL = """
+SELECT COUNT(*)
+FROM audit_events
+WHERE event_type = 'AUTH_LOGIN_FAILED'
+  AND ip_address = %s
+  AND created_at >= %s
+"""
+
 _LIST_AUDIT_FIRST_SQL = """
 SELECT
     a.id,
@@ -284,6 +292,26 @@ class TelemetryRepository:
                 )
                 row = await cur.fetchone()
                 return int(row[0]) if row is not None else 0
+        except Exception as exc:
+            raise classify_mysql_exception(exc) from exc
+
+    async def count_ip_failed_logins_since(
+        self,
+        conn: AsyncConnectionProtocol,
+        *,
+        ip_address: str,
+        since_utc: datetime,
+    ) -> int:
+        """Count failed login attempts from `ip_address` across all usernames since `since_utc`."""
+        since_str = to_mysql_utc(since_utc)
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    _COUNT_IP_FAILED_LOGINS_SINCE_SQL,
+                    (ip_address[:45], since_str),
+                )
+                row = await cur.fetchone()
+                return int(row[0]) if row and row[0] is not None else 0
         except Exception as exc:
             raise classify_mysql_exception(exc) from exc
 

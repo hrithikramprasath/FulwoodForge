@@ -1000,6 +1000,21 @@ class InMemoryTelemetryRepo:
             and ev.metadata.get("username") == norm
         )
 
+    async def count_ip_failed_logins_since(
+        self,
+        _conn: AsyncConnectionProtocol,
+        *,
+        ip_address: str,
+        since_utc: datetime,
+    ) -> int:
+        return sum(
+            1
+            for _, _, _, ev in self._store.audit_events
+            if ev.event_type == "AUTH_LOGIN_FAILED"
+            and ev.ip_address == ip_address
+            and ev.created_at >= since_utc
+        )
+
     async def insert_token_ledger(
         self,
         _conn: AsyncConnectionProtocol,

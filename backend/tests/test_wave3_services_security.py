@@ -426,6 +426,7 @@ async def test_auth_login_lockout_pending_suspended_and_valid_session() -> None:
     telemetry_repo = MagicMock(spec=TelemetryRepository)
 
     telemetry_repo.insert_audit_event = AsyncMock()
+    telemetry_repo.count_ip_failed_logins_since = AsyncMock(return_value=0)
     sessions_repo.create_session = AsyncMock()
     users_repo.touch_last_login = AsyncMock()
 

@@ -15,6 +15,7 @@ import secrets
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Final
 
 import argon2
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
@@ -52,6 +53,8 @@ logger = logging.getLogger(__name__)
 
 LOGIN_LOCKOUT_WINDOW_MINUTES: int = 15
 LOGIN_MAX_FAILED_ATTEMPTS: int = 5
+_MAX_FAILED_LOGIN_ATTEMPTS: Final[int] = LOGIN_MAX_FAILED_ATTEMPTS
+_MAX_IP_FAILED_LOGIN_ATTEMPTS: Final[int] = 25
 LOGIN_LOCKOUT_RETRY_AFTER_SECONDS: int = 900
 
 _PASSWORD_HASHER = argon2.PasswordHasher(
@@ -214,7 +217,15 @@ class AuthService:
                 ip_address,
                 window_start,
             )
-            if failed_count >= LOGIN_MAX_FAILED_ATTEMPTS:
+            ip_failures = await self._telemetry_repo.count_ip_failed_logins_since(
+                conn,
+                ip_address=ip_address,
+                since_utc=window_start,
+            )
+            if (
+                failed_count >= _MAX_FAILED_LOGIN_ATTEMPTS
+                or ip_failures >= _MAX_IP_FAILED_LOGIN_ATTEMPTS
+            ):
                 await self._telemetry_repo.insert_audit_event(
                     conn,
                     actor_user_id=None,
@@ -224,6 +235,7 @@ class AuthService:
                     metadata={
                         "username": req.username,
                         "failed_attempts": failed_count,
+                        "ip_failed_attempts": ip_failures,
                     },
                 )
                 await conn.commit()
