@@ -174,6 +174,17 @@ class SecurityHeadersMiddleware:
                 for k, v in _SECURITY_HEADERS:
                     if k not in present:
                         raw.append((k, v))
+                path = str(scope.get("path", ""))
+                if path == "/api" or path.startswith("/api/"):
+                    if b"cache-control" not in present:
+                        raw.append(
+                            (
+                                b"cache-control",
+                                b"no-store, no-cache, must-revalidate, private",
+                            )
+                        )
+                    if b"pragma" not in present:
+                        raw.append((b"pragma", b"no-cache"))
                 message["headers"] = raw
             await send(message)
 
