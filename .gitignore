@@ -37,3 +37,4 @@ htmlcov/
 # Local developer / agent tooling
 .agents/
 .mcp.json
+graphify-out/

@@ -142,6 +142,29 @@
         "Frontend Vitest + React Testing Library suite covering Auth Gate, AdaptiveForm, ResultView Answer Key, DOMPurify XSS defense, and Admin Dashboard",
         "Updated .github/workflows/ci.yml running all 7 verification stages with zero errors and zero warnings"
       ]
+    },
+    {
+      "wave": 6.2,
+      "title": "Wave 6.2: Surgical Security & UK GDPR/KCSIE Hardening",
+      "status": "completed",
+      "passes": true,
+      "requirements": [
+        "REQ-SEC-01",
+        "REQ-SEC-04",
+        "REQ-AUTH-01",
+        "REQ-AUTH-03",
+        "REQ-AUTH-06",
+        "REQ-SEC-09"
+      ],
+      "deliverables": [
+        "Enforced Cache-Control: no-store, no-cache, must-revalidate, private and Pragma: no-cache on /api/* responses in SecurityHeadersMiddleware",
+        "Restricted trusted proxy peers strictly to loopback, Docker bridge (172.16.0.0/12), and explicit TRUSTED_PROXY_CIDRS",
+        "Offline breached password screening (_COMMON_BREACHED_PASSWORDS) and username-containment checks in RegisterRequest and ChangePasswordRequest",
+        "Pre-flight UK pupil & staff PII safeguarding DLP scanner (UPN, NINO, email, UK phone) on TeacherRequest.topic",
+        "Immediate sibling session revocation on user password change with audit logging (revoked_sibling_sessions count)",
+        "IP-wide password spray rate limiting (count_ip_failed_logins_since >= 25) with composite index efficiency",
+        "Revision resource URL allowlist (sanitise_revision_url), prompt confidentiality canary token guard (_PROMPT_CANARY), and explicit KCSIE safety settings"
+      ]
     }
   ]
 }
