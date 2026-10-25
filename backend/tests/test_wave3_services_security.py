@@ -512,6 +512,7 @@ async def test_authenticate_session_must_change_password_and_change_password() -
         return_value=(session_row, forced_user)
     )
     sessions_repo.extend_session = AsyncMock()
+    sessions_repo.revoke_other_sessions_for_user = AsyncMock(return_value=0)
     users_repo.get_by_id = AsyncMock(return_value=forced_user)
     users_repo.update_password = AsyncMock()
     telemetry_repo.insert_audit_event = AsyncMock()

@@ -76,6 +76,14 @@ SET revoked_at = %s
 WHERE user_id = %s AND revoked_at IS NULL
 """
 
+_REVOKE_OTHER_SESSIONS_FOR_USER_SQL = """
+UPDATE user_sessions
+SET revoked_at = %s
+WHERE user_id = %s
+  AND id != %s
+  AND revoked_at IS NULL
+"""
+
 
 @dataclass(frozen=True, slots=True)
 class SessionRow:
@@ -222,5 +230,25 @@ class SessionsRepository:
                     (to_mysql_utc(now_utc), int(user_id)),
                 )
                 return max(0, int(cur.rowcount))
+        except Exception as exc:
+            raise classify_mysql_exception(exc) from exc
+
+    async def revoke_other_sessions_for_user(
+        self,
+        conn: AsyncConnectionProtocol,
+        *,
+        user_id: int,
+        keep_session_id: int,
+        now_utc: datetime,
+    ) -> int:
+        """Revoke all active sessions for `user_id` except `keep_session_id` (REQ-AUTH-06)."""
+        now_str = to_mysql_utc(now_utc)
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    _REVOKE_OTHER_SESSIONS_FOR_USER_SQL,
+                    (now_str, int(user_id), int(keep_session_id)),
+                )
+                return max(0, int(cur.rowcount or 0))
         except Exception as exc:
             raise classify_mysql_exception(exc) from exc

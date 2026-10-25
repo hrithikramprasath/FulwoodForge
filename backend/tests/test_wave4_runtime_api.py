@@ -586,6 +586,21 @@ class InMemorySessionsRepo:
                 count += 1
         return count
 
+    async def revoke_other_sessions_for_user(
+        self,
+        _conn: Any,
+        *,
+        user_id: int,
+        keep_session_id: int,
+        now_utc: datetime,
+    ) -> int:
+        count = 0
+        for sid, s in list(self._store.sessions.items()):
+            if s.user_id == user_id and sid != keep_session_id and s.revoked_at is None:
+                self._store.sessions[sid] = replace(s, revoked_at=now_utc)
+                count += 1
+        return count
+
 
 class InMemoryInviteCodesRepo:
     def __init__(self, store: InMemoryStore) -> None:

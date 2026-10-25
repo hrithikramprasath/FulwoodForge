@@ -358,6 +358,13 @@ class AuthService:
 
             new_hash = await asyncio.to_thread(self.hash_password, req.new_password)
             await self._users_repo.update_password(conn, user_row.id, new_hash)
+            now_utc = self._clock()
+            revoked_siblings = await self._sessions_repo.revoke_other_sessions_for_user(
+                conn,
+                user_id=user_row.id,
+                keep_session_id=current_session_id,
+                now_utc=now_utc,
+            )
             await self._telemetry_repo.insert_audit_event(
                 conn,
                 actor_user_id=user_row.id,
@@ -367,6 +374,7 @@ class AuthService:
                 metadata={
                     "username": user_row.username,
                     "session_id": current_session_id,
+                    "revoked_sibling_sessions": revoked_siblings,
                 },
             )
 
