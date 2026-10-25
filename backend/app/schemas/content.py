@@ -165,9 +165,9 @@ def _reject_giant_strings(data: object) -> None:
 
 # UK Unique Pupil Number (UPN): 1 letter (excluding I, O, S) followed by 12 digits
 _UK_UPN_RE: Final[re.Pattern[str]] = re.compile(r"\b[A-HJ-NP-RT-Z][0-9]{12}\b")
-# UK National Insurance Number (NINO)
+# UK National Insurance Number (NINO) - includes HMRC test prefix QQ
 _UK_NINO_RE: Final[re.Pattern[str]] = re.compile(
-    r"\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?[0-9]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[A-D]\b",
+    r"\b(?:QQ|[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z])\s?[0-9]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[A-D]\b",
     re.IGNORECASE,
 )
 # Email address in topic prompt
