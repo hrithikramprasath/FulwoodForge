@@ -555,11 +555,24 @@ def sanitise_revision_url(raw_url: str) -> str:
     from urllib.parse import urlparse
 
     candidate = raw_url.strip()
+    if (
+        not candidate
+        or "\\" in candidate
+        or any(ch.isspace() or ord(ch) < 32 for ch in candidate)
+    ):
+        return _SAFE_FALLBACK_REVISION_URL
     try:
         parsed = urlparse(candidate)
+        port = parsed.port
     except ValueError:
         return _SAFE_FALLBACK_REVISION_URL
-    if parsed.scheme != "https" or not parsed.hostname:
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or port not in (None, 443)
+    ):
         return _SAFE_FALLBACK_REVISION_URL
     host = parsed.hostname.lower().rstrip(".")
     for domain in _ALLOWED_REVISION_DOMAINS:
@@ -572,12 +585,17 @@ def _postprocess(
     content: GeneratedContent, request: TeacherRequest
 ) -> GeneratedContent:
     """Repair math escapes, enforce request metadata, and compute the audience note."""
-    if _PROMPT_CANARY in content.model_dump_json():
+    if _PROMPT_CANARY.lower() in content.model_dump_json().lower():
         raise UpstreamGenerationError(
             "Model output violated system prompt confidentiality guard.",
             status_code=502,
         )
     content = GeneratedContent.model_validate(_deep_repair(content.model_dump()))
+    if _PROMPT_CANARY.lower() in content.model_dump_json().lower():
+        raise UpstreamGenerationError(
+            "Model output violated system prompt confidentiality guard.",
+            status_code=502,
+        )
     content.task_type = request.task_type
     content.subject = request.subject
     content.year_group = request.year_group
@@ -724,6 +742,12 @@ def _parse_worker_response(raw_bytes: bytes) -> GenerationResult:
         error = result["error"]
         code = error.get("code")
         retryable = bool(error.get("retryable"))
+        msg = str(error.get("message") or "").strip()
+        if code == 422:
+            raise UpstreamGenerationError(
+                msg or "Generation blocked by classroom safety filter.",
+                status_code=422,
+            )
         exc = RuntimeError(
             f"Generation provider failure (code={code}, retryable={retryable})"
         )
@@ -827,6 +851,11 @@ def generate_with_usage(
         raise
     except Exception as exc:
         code = extract_status_code(exc)
+        if code == 422:
+            raise UpstreamGenerationError(
+                str(exc) or "Generation blocked by classroom safety filter.",
+                status_code=422,
+            ) from exc
         status = (
             503 if code in (429, 503, 504) or isinstance(exc, TimeoutError) else 502
         )
@@ -879,6 +908,11 @@ async def generate_with_usage_async(
         raise
     except Exception as exc:
         code = extract_status_code(exc)
+        if code == 422:
+            raise UpstreamGenerationError(
+                str(exc) or "Generation blocked by classroom safety filter.",
+                status_code=422,
+            ) from exc
         status = (
             503 if code in (429, 503, 504) or isinstance(exc, TimeoutError) else 502
         )

@@ -58,6 +58,7 @@ def run_worker_entrypoint(argv: list[str] | None = None) -> None:
                 "error": {
                     "code": extract_status_code(exc),
                     "retryable": is_transient_error(exc),
+                    "message": str(exc),
                 }
             }
         sys.stdout.write(json.dumps(result))

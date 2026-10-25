@@ -588,7 +588,7 @@ class InMemorySessionsRepo:
 
     async def revoke_other_sessions_for_user(
         self,
-        _conn: Any,
+        _conn: AsyncConnectionProtocol,
         *,
         user_id: int,
         keep_session_id: int,

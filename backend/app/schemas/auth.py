@@ -44,12 +44,14 @@ _COMMON_BREACHED_PASSWORDS: Final[frozenset[str]] = frozenset(
 )
 
 
-def validate_password_not_breached(password: str, username: str | None = None) -> str:
-    """Reject common breached passwords, low-entropy repetitions, and passwords containing username."""
-    if (
-        password.strip().lower() in _COMMON_BREACHED_PASSWORDS
-        or len(set(password.lower())) <= 2
-    ):
+def validate_password_not_breached(
+    password: str,
+    username: str | None = None,
+    display_name: str | None = None,
+) -> str:
+    """Reject common breached passwords, low-entropy repetitions, and passwords containing username or display_name."""
+    lower_pw = password.strip().lower()
+    if lower_pw in _COMMON_BREACHED_PASSWORDS or len(set(password.lower())) <= 2:
         raise ValueError(
             "Password appears in known breached password lists; choose a stronger passphrase."
         )
@@ -59,6 +61,13 @@ def validate_password_not_breached(password: str, username: str | None = None) -
         and username.strip().lower() in password.lower()
     ):
         raise ValueError("Password must not contain your username.")
+    if display_name is not None:
+        cleaned_display = display_name.strip().lower()
+        compact_display = re.sub(r"\s+", "", cleaned_display)
+        if (len(cleaned_display) >= 3 and cleaned_display in password.lower()) or (
+            len(compact_display) >= 3 and compact_display in password.lower()
+        ):
+            raise ValueError("Password must not contain your username or display name.")
     return password
 
 
@@ -135,7 +144,7 @@ class RegisterRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_password(self) -> RegisterRequest:
-        validate_password_not_breached(self.password, self.username)
+        validate_password_not_breached(self.password, self.username, self.display_name)
         return self
 
 

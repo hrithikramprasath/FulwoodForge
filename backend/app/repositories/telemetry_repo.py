@@ -61,7 +61,7 @@ INSERT INTO audit_events (
 _COUNT_FAILED_LOGINS_SINCE_SQL = """
 SELECT COUNT(*)
 FROM audit_events
-WHERE event_type = 'LOGIN_FAILED'
+WHERE event_type IN ('AUTH_LOGIN_FAILED', 'LOGIN_FAILED')
   AND ip_address = %s
   AND created_at >= %s
   AND JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.username')) = %s

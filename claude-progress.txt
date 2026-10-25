@@ -129,5 +129,11 @@
      - Injected confidential prompt canary `_PROMPT_CANARY` in `_build_system_instruction` and rejected leaks in `_postprocess` with 502 `UpstreamGenerationError`.
      - Configured explicit KCSIE harm safety settings (`BLOCK_LOW_AND_ABOVE` on hate speech, harassment, sexually explicit, and dangerous content) and checked candidate `finish_reason.endswith("SAFETY")`.
   8. **Comprehensive Regression Suite (`backend/tests/test_wave6_2_compliance_hardening.py`):** Added 7 fully typed (`mypy --strict`) regression tests verifying all Wave 6.2 security guarantees.
+  9. **Post-Flash Principal Adversarial Audit & Remediation:**
+     - Fixed `UpstreamGenerationError.__init__` (`backend/app/services/errors.py:207`), `worker.py` (`backend/app/services/worker.py:61`), and `_parse_worker_response` (`backend/app/services/gemini.py:748`) so `422` safety-blocked responses preserve `status_code=422` (instead of silently clobbering to `502` and retrying 3x across the worker subprocess boundary).
+     - Hardened `sanitise_revision_url` (`backend/app/services/gemini.py:553`) against WHATWG/RFC-3986 backslash parser differentials (`https://evil.com\@bbc.co.uk`), embedded credentials (`user:pass@`), non-standard ports (`:8443`), and control characters.
+     - Extended `validate_password_not_breached` (`backend/app/schemas/auth.py:47`) to reject passwords containing either `username` or `display_name` (spaced or compact).
+     - Hardened DLP regexes (`backend/app/schemas/content.py:167`) with `re.IGNORECASE` and hyphen/space delimiter support for UPN, NINO, and UK phone numbers while preserving zero false-positives on GCSE exam codes, scientific constants, binary strings, and ISBNs.
+     - Aligned `_COUNT_FAILED_LOGINS_SINCE_SQL` (`backend/app/repositories/telemetry_repo.py:64`) with `AUTH_LOGIN_FAILED` and replaced `_conn: Any` with `_conn: AsyncConnectionProtocol` in `test_wave4_runtime_api.py:591`.
 
 [CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]

@@ -204,7 +204,7 @@ class UpstreamGenerationError(ServiceError):
         *,
         status_code: int = 502,
     ) -> None:
-        resolved_status = status_code if status_code in (502, 503) else 502
+        resolved_status = status_code if status_code in (422, 502, 503) else 502
         super().__init__(detail, status_code=resolved_status)
 
 
