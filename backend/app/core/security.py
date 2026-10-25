@@ -8,7 +8,9 @@ Unidirectional Dependency Law:
 from __future__ import annotations
 
 import ipaddress
+import os
 from collections.abc import Iterable, Mapping
+from typing import Final
 from urllib.parse import urlsplit
 
 from starlette.requests import Request
@@ -24,15 +26,33 @@ _ALLOWED_SEC_FETCH_SITES: frozenset[str] = frozenset(
 )
 
 
+_DOCKER_BRIDGE_NET: Final[ipaddress.IPv4Network | ipaddress.IPv6Network] = (
+    ipaddress.ip_network("172.16.0.0/12")
+)
+
+
 def _is_trusted_local_proxy_peer(peer: str) -> bool:
-    """Return True when the direct TCP peer is local loopback or the local Docker bridge."""
+    """Only trust forwarded IP headers from loopback, Docker bridge, or explicit TRUSTED_PROXY_CIDRS."""
     if peer == "testclient":
         return True
     try:
         addr = ipaddress.ip_address(peer)
-        return addr.is_loopback or addr.is_private
     except ValueError:
         return False
+    if addr.is_loopback or addr in _DOCKER_BRIDGE_NET:
+        return True
+    extra_cidrs = os.environ.get("TRUSTED_PROXY_CIDRS", "").strip()
+    if extra_cidrs:
+        for raw_cidr in extra_cidrs.split(","):
+            cidr = raw_cidr.strip()
+            if not cidr:
+                continue
+            try:
+                if addr in ipaddress.ip_network(cidr, strict=False):
+                    return True
+            except ValueError:
+                continue
+    return False
 
 
 def extract_client_ip(request: Request) -> str:
