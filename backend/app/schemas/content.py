@@ -25,7 +25,8 @@ rendered by KaTeX; units/money/percentages/degrees stay plain text.
 
 from __future__ import annotations
 
-from typing import Literal
+import re
+from typing import Final, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -162,6 +163,43 @@ def _reject_giant_strings(data: object) -> None:
 
 # ── Input schema (matches the frontend TeacherRequest / GenerateRequest) ─────
 
+# UK Unique Pupil Number (UPN): 1 letter (excluding I, O, S) followed by 12 digits
+_UK_UPN_RE: Final[re.Pattern[str]] = re.compile(r"\b[A-HJ-NP-RT-Z][0-9]{12}\b")
+# UK National Insurance Number (NINO)
+_UK_NINO_RE: Final[re.Pattern[str]] = re.compile(
+    r"\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\s?[0-9]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[A-D]\b",
+    re.IGNORECASE,
+)
+# Email address in topic prompt
+_EMAIL_PII_RE: Final[re.Pattern[str]] = re.compile(
+    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
+)
+# UK mobile / landline phone number (e.g. 07xxx xxxxxx or +44 7xxx xxxxxx)
+_UK_PHONE_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:\+44\s?7\d{3}|\b07\d{3})\s?\d{3}\s?\d{3}\b"
+)
+
+
+def scan_topic_for_pupil_pii(text: str) -> str:
+    """Reject lesson prompts containing pupil/staff PII identifiers (UK GDPR / KCSIE DLP)."""
+    if _UK_UPN_RE.search(text):
+        raise ValueError(
+            "Safeguarding DLP block: Topic contains a UK Unique Pupil Number (UPN). Remove all pupil identifiers."
+        )
+    if _UK_NINO_RE.search(text):
+        raise ValueError(
+            "Safeguarding DLP block: Topic contains a UK National Insurance Number. Remove all personal identifiers."
+        )
+    if _EMAIL_PII_RE.search(text):
+        raise ValueError(
+            "Safeguarding DLP block: Topic contains an email address. Remove all personal contact details."
+        )
+    if _UK_PHONE_RE.search(text):
+        raise ValueError(
+            "Safeguarding DLP block: Topic contains a UK phone number. Remove all personal contact details."
+        )
+    return text
+
 
 class TeacherRequest(BaseModel):
     task_type: TaskTypeLiteral
@@ -187,7 +225,8 @@ class TeacherRequest(BaseModel):
     @classmethod
     def _strip_topic(cls, v: object) -> object:
         if isinstance(v, str):
-            return v.strip()
+            cleaned = v.strip()
+            return scan_topic_for_pupil_pii(cleaned)
         return v
 
     @field_validator("exam_board", mode="before")
