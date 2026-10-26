@@ -185,6 +185,14 @@ class SecurityHeadersMiddleware:
                         )
                     if b"pragma" not in present:
                         raw.append((b"pragma", b"no-cache"))
+                elif path.startswith("/assets/"):
+                    if b"cache-control" not in present:
+                        raw.append(
+                            (
+                                b"cache-control",
+                                b"public, max-age=31536000, immutable",
+                            )
+                        )
                 message["headers"] = raw
             await send(message)
 
