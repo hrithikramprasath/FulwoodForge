@@ -1,17 +1,57 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directories: ["/frontend", "/frontend/renderer"]
-    schedule: {interval: weekly}
+    directories:
+      - /frontend
+      - /frontend/renderer
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 10
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: uv
     directory: /backend
-    schedule: {interval: weekly}
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 10
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: docker
     directory: /
-    schedule: {interval: daily}
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 5
+
   - package-ecosystem: docker-compose
     directory: /
-    schedule: {interval: daily}
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 5
+
   - package-ecosystem: github-actions
     directory: /
-    schedule: {interval: weekly}
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 5
