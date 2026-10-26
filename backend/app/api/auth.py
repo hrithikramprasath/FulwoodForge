@@ -70,7 +70,6 @@ async def register_user(
     username_ctx.set(user_dto.username)
     request.state.username = user_dto.username
 
-    base_status = await auth_service.get_auth_status(None)
     if user_dto.status == "ACTIVE":
         user_agent = request.headers.get("user-agent", "")[:255]
         raw_token = await auth_service.issue_session_for_user(
@@ -80,23 +79,17 @@ async def register_user(
         )
         set_session_cookie(response, raw_token, container.config)
         response.status_code = status.HTTP_201_CREATED
-        return AuthStatusResponse(
-            authenticated=True,
-            user=user_dto,
-            registration_mode=base_status.registration_mode,
-            maintenance_mode=base_status.maintenance_mode,
-            allowed_subjects=base_status.allowed_subjects,
-            allowed_task_types=base_status.allowed_task_types,
-        )
+        return await auth_service.get_auth_status(raw_token)
 
+    base_status = await auth_service.get_auth_status(None)
     response.status_code = status.HTTP_202_ACCEPTED
     return AuthStatusResponse(
         authenticated=False,
         user=user_dto,
         registration_mode=base_status.registration_mode,
         maintenance_mode=base_status.maintenance_mode,
-        allowed_subjects=base_status.allowed_subjects,
-        allowed_task_types=base_status.allowed_task_types,
+        allowed_subjects=[],
+        allowed_task_types=[],
     )
 
 

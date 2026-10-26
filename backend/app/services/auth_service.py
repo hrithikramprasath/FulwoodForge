@@ -450,13 +450,16 @@ class AuthService:
         async with self._pool.connection() as conn:
             settings = await self._settings_repo.get_or_init_settings(conn)
 
+        is_authenticated = user_dto is not None
         return AuthStatusResponse(
-            authenticated=user_dto is not None,
+            authenticated=is_authenticated,
             user=user_dto,
             registration_mode=settings.registration_mode,
             maintenance_mode=settings.maintenance_mode,
-            allowed_subjects=settings.allowed_subjects,
-            allowed_task_types=settings.allowed_task_types,
+            allowed_subjects=settings.allowed_subjects if is_authenticated else [],
+            allowed_task_types=(
+                settings.allowed_task_types if is_authenticated else []
+            ),
         )
 
     async def issue_session_for_user(
