@@ -1372,6 +1372,8 @@ def test_auth_registration_modes_login_cookie_attributes_and_logout() -> None:
         assert status_r.status_code == 200
         assert status_r.json()["authenticated"] is False
         assert status_r.json()["registration_mode"] == "INVITE_ONLY"
+        assert status_r.json()["allowed_subjects"] == []
+        assert status_r.json()["allowed_task_types"] == []
 
         # 2. Registering in INVITE_ONLY without an invite code fails with 422 problem+json
         no_invite = client.post(
@@ -1426,6 +1428,12 @@ def test_auth_registration_modes_login_cookie_attributes_and_logout() -> None:
         assert alice_body["authenticated"] is True
         assert alice_body["user"]["username"] == "teacher_alice"
         assert alice_body["user"]["display_name"] == "Teacher_Alice"
+        assert alice_body["allowed_subjects"] == list(ALL_SUBJECTS)
+        assert alice_body["allowed_task_types"] == [
+            "worksheet",
+            "powerpoint",
+            "booklet",
+        ]
         assert "ff_session=" in reg_alice.headers.get("set-cookie", "")
 
         # Status reflects authenticated Teacher_Alice
@@ -1433,6 +1441,12 @@ def test_auth_registration_modes_login_cookie_attributes_and_logout() -> None:
         assert authed_status.status_code == 200
         assert authed_status.json()["authenticated"] is True
         assert authed_status.json()["user"]["username"] == "teacher_alice"
+        assert authed_status.json()["allowed_subjects"] == list(ALL_SUBJECTS)
+        assert authed_status.json()["allowed_task_types"] == [
+            "worksheet",
+            "powerpoint",
+            "booklet",
+        ]
 
         # Logout Alice
         assert client.post("/api/auth/logout").status_code == 204

@@ -47,6 +47,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   };
 });
 
+import App from "@/App";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { ForcedPasswordChangeModal } from "@/components/auth/ForcedPasswordChangeModal";
@@ -617,5 +618,31 @@ describe("index.html strict CSP font policy (REQ-SEC-01)", () => {
     const main = readFileSync(path.resolve(__dirname, "../main.tsx"), "utf-8");
     expect(main).toContain("@fontsource-variable/plus-jakarta-sans");
     expect(main).toContain("@fontsource-variable/jetbrains-mono");
+  });
+});
+
+describe("App shell lazy loading and routing", () => {
+  it("renders AuthGate when unauthenticated without executing lazy chunks", async () => {
+    mocked.auth.status.mockResolvedValue(authStatus("OPEN"));
+    render(<App />);
+    expect(
+      await screen.findByRole("button", { name: "Sign in" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Your curriculum canvas is empty")).toBeNull();
+  });
+
+  it("renders StudioWorkspace under Suspense when authenticated", async () => {
+    mocked.auth.status.mockResolvedValue({
+      authenticated: true,
+      user: USER,
+      registration_mode: "OPEN",
+      maintenance_mode: false,
+      allowed_subjects: ["Mathematics"],
+      allowed_task_types: ["worksheet"],
+    });
+    render(<App />);
+    expect(
+      await screen.findByText("Your curriculum canvas is empty"),
+    ).toBeInTheDocument();
   });
 });

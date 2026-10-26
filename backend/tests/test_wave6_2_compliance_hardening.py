@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import patch
 
 import pytest
+from app.core.hardening import SecurityHeadersMiddleware
 from app.core.security import _is_trusted_local_proxy_peer
 from app.main import app
 from app.repositories.sessions_repo import SessionsRepository
@@ -66,6 +68,92 @@ def test_api_responses_include_cache_control_no_store() -> None:
             live_resp.headers.get("cache-control")
             != "no-store, no-cache, must-revalidate, private"
         )
+
+        asset_resp = client.get("/assets/index-hash.js")
+        assert (
+            asset_resp.headers.get("cache-control")
+            == "public, max-age=31536000, immutable"
+        )
+
+
+def test_auth_status_payload_minimization_and_assets_cache_control() -> None:
+    """Verify unauthenticated /api/auth/status returns empty subject/task lists while authenticated returns populated lists."""
+    container, _ = build_in_memory_runtime()
+    app.state.container = container
+    with TestClient(app, base_url="https://testserver") as client:
+        # 1. Unauthenticated /api/auth/status
+        unauthed_resp = client.get("/api/auth/status")
+        assert unauthed_resp.status_code == 200
+        assert (
+            unauthed_resp.headers.get("cache-control")
+            == "no-store, no-cache, must-revalidate, private"
+        )
+        unauthed_data = unauthed_resp.json()
+        assert unauthed_data["authenticated"] is False
+        assert unauthed_data["user"] is None
+        assert unauthed_data["allowed_subjects"] == []
+        assert unauthed_data["allowed_task_types"] == []
+        assert "registration_mode" in unauthed_data
+        assert "maintenance_mode" in unauthed_data
+
+        # 2. Authenticated /api/auth/status
+        login_resp = client.post(
+            "/api/auth/login",
+            json={
+                "username": "admin",
+                "password": "BootstrapAdminPassword!2026",
+            },
+        )
+        assert login_resp.status_code == 200
+        authed_resp = client.get("/api/auth/status")
+        assert authed_resp.status_code == 200
+        authed_data = authed_resp.json()
+        assert authed_data["authenticated"] is True
+        assert authed_data["user"]["username"] == "admin"
+        assert len(authed_data["allowed_subjects"]) > 0
+        assert len(authed_data["allowed_task_types"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_security_headers_middleware_immutable_assets_cache_control() -> None:
+    """Verify SecurityHeadersMiddleware stamps immutable Cache-Control on /assets/* and no-store on /api/*."""
+    captured: list[tuple[bytes, bytes]] = []
+
+    async def dummy_app(scope: Any, receive: Any, send: Any) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    async def capture_send(message: Any) -> None:
+        if message["type"] == "http.response.start":
+            captured.extend(message.get("headers", []))
+
+    async def dummy_receive() -> dict[str, Any]:
+        return {"type": "http.request"}
+
+    middleware = SecurityHeadersMiddleware(dummy_app)
+
+    # Simulated /assets/index-hash.js
+    captured.clear()
+    await middleware(
+        {"type": "http", "path": "/assets/index-hash.js", "method": "GET"},
+        dummy_receive,
+        capture_send,
+    )
+    headers = dict(captured)
+    assert headers.get(b"cache-control") == b"public, max-age=31536000, immutable"
+
+    # Simulated /api/auth/status
+    captured.clear()
+    await middleware(
+        {"type": "http", "path": "/api/auth/status", "method": "GET"},
+        dummy_receive,
+        capture_send,
+    )
+    headers = dict(captured)
+    assert (
+        headers.get(b"cache-control") == b"no-store, no-cache, must-revalidate, private"
+    )
+    assert headers.get(b"pragma") == b"no-cache"
 
 
 def test_private_lan_ip_cannot_spoof_forwarded_headers(
