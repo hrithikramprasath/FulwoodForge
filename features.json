@@ -165,6 +165,23 @@
         "IP-wide password spray rate limiting (count_ip_failed_logins_since >= 25) with composite index efficiency",
         "Revision resource URL allowlist (sanitise_revision_url), prompt confidentiality canary token guard (_PROMPT_CANARY), and explicit KCSIE safety settings"
       ]
+    },
+    {
+      "wave": 6.3,
+      "title": "Wave 6.3: Performance & Reconnaissance Hardening",
+      "status": "completed",
+      "passes": true,
+      "requirements": [
+        "REQ-SEC-01",
+        "REQ-AUTH-01",
+        "REQ-API-01"
+      ],
+      "deliverables": [
+        "Immutable Cache-Control (public, max-age=31536000, immutable) for hashed /assets/* static bundles in SecurityHeadersMiddleware",
+        "Minimized unauthenticated GET /api/auth/status payload returning empty allowed_subjects and allowed_task_types lists while preserving registration_mode and maintenance_mode",
+        "Code-split StudioWorkspace and AdminDashboard in frontend/src/App.tsx using React.lazy and layout-matched Suspense skeleton",
+        "Comprehensive backend and frontend regression suites verifying cache headers, auth status payload minimization, and lazy boundary routing"
+      ]
     }
   ]
 }

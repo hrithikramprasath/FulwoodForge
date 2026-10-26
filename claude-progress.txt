@@ -137,3 +137,23 @@
      - Aligned `_COUNT_FAILED_LOGINS_SINCE_SQL` (`backend/app/repositories/telemetry_repo.py:64`) with `AUTH_LOGIN_FAILED` and replaced `_conn: Any` with `_conn: AsyncConnectionProtocol` in `test_wave4_runtime_api.py:591`.
 
 [CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]
+
+## [2026-10-26T10:30:00+01:00] - Wave 6.3: Performance & Reconnaissance Hardening (COMPLETED)
+- **Status:** COMPLETE (`passes: true`); `./init.sh` from repo root exits 0 across all 7 stages (97 backend pytest tests, 16 deploy unit tests, 19 frontend vitest tests, 0 mypy/ruff/eslint/prettier errors, production build clean).
+- **Completed Hardening Deliverables:**
+  1. **Immutable `Cache-Control` for Hashed `/assets/*` Bundles (`backend/app/core/hardening.py`):**
+     - Extended `SecurityHeadersMiddleware` with an `elif path.startswith("/assets/"):` branch appending `(b"cache-control", b"public, max-age=31536000, immutable")` if `b"cache-control"` is not already present, ensuring immutable client-side caching of content-addressed static bundles while strictly preserving `no-store, no-cache, must-revalidate, private` and `Pragma: no-cache` for `/api/*` routes.
+  2. **Minimized Unauthenticated `/api/auth/status` Payload (`backend/app/services/auth_service.py` & `backend/app/api/auth.py`):**
+     - Hardened `AuthService.get_auth_status` to return `allowed_subjects=[]` and `allowed_task_types=[]` when the caller is unauthenticated (`user is None`), preventing pre-authentication curriculum surface reconnaissance.
+     - Preserved `registration_mode` and `maintenance_mode` for unauthenticated callers so `AuthGate.tsx` renders correct registration/login workflows.
+     - Maintained full `settings.allowed_subjects` and `settings.allowed_task_types` for authenticated sessions so `AdaptiveForm.tsx` functions identically.
+     - Updated registration endpoint (`backend/app/api/auth.py`) to retrieve post-issuance status with populated lists for active users.
+  3. **Code-Split `StudioWorkspace` & `AdminDashboard` in `frontend/src/App.tsx`:**
+     - Converted `StudioWorkspace` and `AdminDashboard` to `React.lazy` imports wrapped in a layout-matched `<Suspense>` boundary with skeleton fallback.
+     - Reduced initial entrypoint JavaScript bundle size from 147.5 kB to 65.1 kB, ensuring unauthenticated visitors on `/login` (`AuthGate`) never eagerly execute heavy studio editor/preview renderer/admin chunks.
+  4. **Comprehensive Regression Suite & Verification:**
+     - Added test coverage in `backend/tests/test_wave6_2_compliance_hardening.py` asserting immutable Cache-Control on `/assets/*` paths and verified payload minimization on unauthenticated vs authenticated `/api/auth/status`.
+     - Added test coverage in `frontend/src/__tests__/wave5_ui_security.test.tsx` verifying clean `AuthGate` rendering without lazy chunks and clean `<Suspense>` lazy boundary resolution for authenticated users.
+     - Successfully executed full 7-stage `./init.sh` pipeline with zero warnings.
+
+[CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]
