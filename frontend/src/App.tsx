@@ -1,14 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { ForcedPasswordChangeModal } from "@/components/auth/ForcedPasswordChangeModal";
 import { InlineProblem } from "@/components/preview/ErrorState";
 import { StudioNav, type StudioView } from "@/components/workspace/StudioNav";
-import { StudioWorkspace } from "@/components/workspace/StudioWorkspace";
 import { api, isAbortError } from "@/lib/api";
 import type { AuthStatusResponse } from "@/types/content";
+
+const StudioWorkspace = lazy(() =>
+  import("@/components/workspace/StudioWorkspace").then((m) => ({
+    default: m.StudioWorkspace,
+  })),
+);
+
+const AdminDashboard = lazy(() =>
+  import("@/components/admin/AdminDashboard").then((m) => ({
+    default: m.AdminDashboard,
+  })),
+);
 
 /*
  * Application shell: native session gate (REQ-AUTH-01..06) -> forced password
@@ -93,15 +103,30 @@ export default function App() {
       />
       {user.must_change_password ? (
         <ForcedPasswordChangeModal onChanged={refresh} />
-      ) : user.role === "ADMIN" && view === "admin" ? (
-        <AdminDashboard currentUserUuid={user.uuid} />
       ) : (
-        <StudioWorkspace
-          allowedSubjects={status.allowed_subjects}
-          allowedTaskTypes={status.allowed_task_types}
-          maintenanceMode={status.maintenance_mode}
-          onGenerated={() => setGenerations((n) => n + 1)}
-        />
+        <Suspense
+          fallback={
+            <div
+              className="flex min-h-[calc(100vh-4rem)] flex-1 flex-col gap-4 p-6"
+              aria-busy="true"
+              aria-label="Loading workspace"
+            >
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-96 w-full" />
+            </div>
+          }
+        >
+          {user.role === "ADMIN" && view === "admin" ? (
+            <AdminDashboard currentUserUuid={user.uuid} />
+          ) : (
+            <StudioWorkspace
+              allowedSubjects={status.allowed_subjects}
+              allowedTaskTypes={status.allowed_task_types}
+              maintenanceMode={status.maintenance_mode}
+              onGenerated={() => setGenerations((n) => n + 1)}
+            />
+          )}
+        </Suspense>
       )}
       <footer className="no-print border-t border-border">
         <p className="m-0 px-4 py-3 text-[11px] text-muted-foreground">
