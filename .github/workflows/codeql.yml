@@ -41,3 +41,18 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+          upload: false
+          output: "sarif-results"
+
+      - name: Upload Code Scanning Results to Security Tab (If Permitted)
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: "sarif-results/${{ matrix.language }}.sarif"
+          category: "/language:${{ matrix.language }}"
+
+      - name: Upload SARIF Report as CI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-${{ matrix.language }}-sarif
+          path: "sarif-results/${{ matrix.language }}.sarif"
