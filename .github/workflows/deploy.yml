@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: production-deployment
   cancel-in-progress: false
@@ -14,9 +17,11 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Deploy changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd ~/FulwoodForge
-          git fetch origin main
-          git reset --hard origin/main
+          git fetch "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" main
+          git reset --hard FETCH_HEAD
           docker compose build app
           docker compose up -d app
