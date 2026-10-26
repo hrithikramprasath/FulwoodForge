@@ -1,0 +1,21 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy changes
+        run: |
+          cd ~/FulwoodForge
+          git fetch origin main
+          git reset --hard origin/main
+          docker compose build app
+          docker compose up -d app
