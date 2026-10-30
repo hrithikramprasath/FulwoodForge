@@ -25,3 +25,5 @@ jobs:
           git reset --hard origin/main
           docker compose build app
           docker compose up -d app
+          docker image prune -f
+          docker builder prune -f --reserved-space 3GB
