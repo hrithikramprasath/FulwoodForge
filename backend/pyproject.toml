@@ -7,6 +7,8 @@ requires-python = ">=3.12"
 dependencies = [
     "argon2-cffi>=23.1.0",
     "asyncmy>=0.2.10",
+    # Pinned to >=2026.10.23 to enforce exclusion of compromised emSign root CAs (GHSA-6q48-6c7w-9gw2).
+    "certifi>=2026.10.23",
     "cryptography>=44.0.0",
     "fastapi>=0.139.2",
     "google-genai>=2.22.0",

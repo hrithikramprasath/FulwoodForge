@@ -220,6 +220,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "argon2-cffi" },
     { name = "asyncmy" },
+    { name = "certifi" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "google-genai" },
@@ -248,6 +249,7 @@ dev = [
 requires-dist = [
     { name = "argon2-cffi", specifier = ">=23.1.0" },
     { name = "asyncmy", specifier = ">=0.2.10" },
+    { name = "certifi", specifier = ">=2026.10.23" },
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "fastapi", specifier = ">=0.139.2" },
     { name = "google-genai", specifier = ">=2.22.0" },
