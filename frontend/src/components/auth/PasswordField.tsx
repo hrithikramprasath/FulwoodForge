@@ -6,12 +6,37 @@ import { cn } from "@/lib/utils";
 export const PASSWORD_MIN = 10;
 export const PASSWORD_MAX = 128;
 
-export function passwordStrength(password: string): {
+export function passwordStrength(
+  password: string,
+  username?: string,
+  displayName?: string,
+): {
   level: 0 | 1 | 2 | 3;
   label: string;
 } {
   if (password.length === 0) return { level: 0, label: "Enter a password" };
   if (password.length < PASSWORD_MIN) return { level: 1, label: "Too short" };
+
+  const lowerPw = password.toLowerCase();
+  const trimmedUser = username?.trim().toLowerCase();
+  if (trimmedUser && trimmedUser.length >= 3 && lowerPw.includes(trimmedUser)) {
+    return { level: 1, label: "Cannot contain username" };
+  }
+
+  const trimmedDisplay = displayName?.trim().toLowerCase();
+  if (
+    trimmedDisplay &&
+    trimmedDisplay.length >= 3 &&
+    (lowerPw.includes(trimmedDisplay) ||
+      lowerPw.includes(trimmedDisplay.replace(/\s+/g, "")))
+  ) {
+    return { level: 1, label: "Cannot contain display name" };
+  }
+
+  if (new Set(lowerPw).size <= 2) {
+    return { level: 1, label: "Too simple" };
+  }
+
   const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) =>
     r.test(password),
   ).length;
@@ -52,8 +77,16 @@ export function PasswordInput({
 }
 
 /** Live length meter (10..128) with a three-segment strength bar. */
-export function PasswordMeter({ password }: { password: string }) {
-  const { level, label } = passwordStrength(password);
+export function PasswordMeter({
+  password,
+  username,
+  displayName,
+}: {
+  password: string;
+  username?: string;
+  displayName?: string;
+}) {
+  const { level, label } = passwordStrength(password, username, displayName);
   const tone =
     level === 3 ? "bg-success" : level === 2 ? "bg-warning" : "bg-danger";
   return (

@@ -51,9 +51,40 @@ export function AuthGate({
 
   const fieldErrors =
     problem instanceof ApiProblemError ? problem.invalidParams : {};
-  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+
+  const usernameError =
+    fieldErrors["username"] ??
+    (fieldErrors["body"] && /username/i.test(fieldErrors["body"])
+      ? fieldErrors["body"]
+      : undefined);
+
+  const displayNameError =
+    fieldErrors["display_name"] ??
+    (fieldErrors["body"] && /display/i.test(fieldErrors["body"])
+      ? fieldErrors["body"]
+      : undefined);
+
+  const passwordError =
+    fieldErrors["password"] ??
+    (fieldErrors["body"] && /(?:password|passphrase)/i.test(fieldErrors["body"])
+      ? fieldErrors["body"]
+      : undefined);
+
+  const inviteError =
+    fieldErrors["invite_code"] ??
+    (fieldErrors["body"] && /invite/i.test(fieldErrors["body"])
+      ? fieldErrors["body"]
+      : undefined);
+
   const registering = mode === "register";
   const needsInvite = status.registration_mode === "INVITE_ONLY";
+
+  const hasVisibleFieldErrors = Boolean(
+    usernameError ||
+    (registering && displayNameError) ||
+    passwordError ||
+    (registering && needsInvite && inviteError),
+  );
 
   function switchMode(next: string) {
     setMode(next as Mode);
@@ -224,16 +255,22 @@ export function AuthGate({
                   <Field
                     label="Username"
                     htmlFor={`${uid}-username`}
-                    error={fieldErrors["username"]}
+                    error={usernameError}
+                    hint={
+                      registering
+                        ? "Letters, numbers, dots, hyphens, or underscores. No email."
+                        : undefined
+                    }
                   >
                     <Input
                       id={`${uid}-username`}
                       autoComplete="username"
                       autoCapitalize="none"
+                      autoCorrect="off"
                       spellCheck={false}
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      aria-invalid={Boolean(fieldErrors["username"])}
+                      aria-invalid={Boolean(usernameError)}
                     />
                   </Field>
 
@@ -241,7 +278,7 @@ export function AuthGate({
                     <Field
                       label="Display name (optional)"
                       htmlFor={`${uid}-display`}
-                      error={fieldErrors["display_name"]}
+                      error={displayNameError}
                     >
                       <Input
                         id={`${uid}-display`}
@@ -249,6 +286,7 @@ export function AuthGate({
                         maxLength={64}
                         value={displayName}
                         onChange={(e) => setDisplayName(e.target.value)}
+                        aria-invalid={Boolean(displayNameError)}
                       />
                     </Field>
                   )}
@@ -256,7 +294,7 @@ export function AuthGate({
                   <Field
                     label="Password"
                     htmlFor={`${uid}-password`}
-                    error={fieldErrors["password"]}
+                    error={passwordError}
                   >
                     <PasswordInput
                       id={`${uid}-password`}
@@ -265,32 +303,41 @@ export function AuthGate({
                       }
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      aria-invalid={Boolean(fieldErrors["password"])}
+                      aria-invalid={Boolean(passwordError)}
                     />
-                    {registering && <PasswordMeter password={password} />}
+                    {registering && (
+                      <PasswordMeter
+                        password={password}
+                        username={username}
+                        displayName={displayName}
+                      />
+                    )}
                   </Field>
 
                   {registering && needsInvite && (
                     <Field
                       label="Department / School Invite Code"
                       htmlFor={`${uid}-invite`}
-                      error={fieldErrors["invite_code"]}
+                      error={inviteError}
                     >
                       <Input
                         id={`${uid}-invite`}
                         autoCapitalize="characters"
+                        autoCorrect="off"
                         spellCheck={false}
                         placeholder="e.g. FULWOOD-2026"
                         value={inviteCode}
                         onChange={(e) => setInviteCode(e.target.value)}
-                        aria-invalid={Boolean(fieldErrors["invite_code"])}
+                        aria-invalid={Boolean(inviteError)}
                       />
                     </Field>
                   )}
 
-                  {problem !== null && !hasFieldErrors && (
-                    <InlineProblem error={problem} />
-                  )}
+                  {problem !== null &&
+                    (!hasVisibleFieldErrors ||
+                      Boolean(fieldErrors["body"])) && (
+                      <InlineProblem error={problem} />
+                    )}
                   {locked && (
                     <p
                       role="status"

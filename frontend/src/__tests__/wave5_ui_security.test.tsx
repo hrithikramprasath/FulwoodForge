@@ -384,6 +384,75 @@ describe("AuthGate", () => {
     );
     expect(await screen.findByText(/15:00|900|14:5\d/)).toBeInTheDocument();
   });
+
+  it("surfaces body validation errors in both field and inline problem banner without silent swallowing", async () => {
+    const user = userEvent.setup();
+    mocked.auth.register.mockRejectedValue(
+      new ApiProblemError({
+        status: 422,
+        title: "Request Validation Failed",
+        detail: "One or more request fields failed validation.",
+        invalidParams: {
+          body: "Value error, Password must not contain your username.",
+        },
+      }),
+    );
+    render(<AuthGate status={authStatus("OPEN")} onAuthenticated={() => {}} />);
+    await user.click(
+      screen.getByRole("tab", { name: /Create Educator Account/ }),
+    );
+    await user.type(screen.getByLabelText("Username"), "teacherbob");
+    await user.type(screen.getByLabelText("Password"), "TeacherbobPass123!");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    // Both the inline banner and the password field error must be visible
+    expect(
+      await screen.findAllByText(/Password must not contain your username\./),
+    ).not.toHaveLength(0);
+    expect(screen.getByLabelText("Password")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
+
+  it("surfaces invalid invite code error and highlights invite code input", async () => {
+    const user = userEvent.setup();
+    mocked.auth.register.mockRejectedValue(
+      new ApiProblemError({
+        status: 422,
+        title: "Invalid Invite Code",
+        detail:
+          "The provided invite code is invalid, expired, or has reached its maximum uses.",
+        invalidParams: {
+          invite_code:
+            "The provided invite code is invalid, expired, or has reached its maximum uses.",
+        },
+      }),
+    );
+    render(
+      <AuthGate
+        status={authStatus("INVITE_ONLY")}
+        onAuthenticated={() => {}}
+      />,
+    );
+    await user.click(
+      screen.getByRole("tab", { name: /Create Educator Account/ }),
+    );
+    await user.type(screen.getByLabelText("Username"), "validuser");
+    await user.type(screen.getByLabelText("Password"), "ValidPassword123!");
+    await user.type(screen.getByLabelText(/Invite Code/), "EXPIRED-CODE");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(
+      await screen.findByText(
+        "The provided invite code is invalid, expired, or has reached its maximum uses.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Invite Code/)).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
 });
 
 describe("ForcedPasswordChangeModal", () => {
