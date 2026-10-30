@@ -156,4 +156,20 @@
      - Added test coverage in `frontend/src/__tests__/wave5_ui_security.test.tsx` verifying clean `AuthGate` rendering without lazy chunks and clean `<Suspense>` lazy boundary resolution for authenticated users.
      - Successfully executed full 7-stage `./init.sh` pipeline with zero warnings.
 
+## [2026-10-30T20:13:00+01:00] - Wave 6.4: Application IP Rate Limiting & DoS Hardening (COMPLETED)
+- **Status:** COMPLETE (`passes: true`); `./init.sh` from repo root exits 0 across all 7 stages (106 backend pytest tests with 15 subtests, 16 deploy unit tests, 21 frontend vitest tests, 0 mypy/ruff/eslint/prettier errors, production build clean).
+- **Completed Hardening Deliverables:**
+  1. **Built-In Application IP Rate Limiting (`backend/app/core/limits.py` & `backend/app/core/hardening.py`):**
+     - Initialized `ip_rate_limiter = KeyedSlidingWindow(_int_env("IP_RATE_LIMIT_PER_MINUTE", 120), 60.0, "ip_request")`.
+     - Added bounded memory eviction in `KeyedSlidingWindow` when cardinality exceeds 10,000 keys to guard against wide-subnet memory exhaustion.
+     - Implemented pure ASGI `IpRateLimitMiddleware` wrapping `/api/*` endpoints, returning IETF RFC 9457 `application/problem+json` `HTTP 429 Too Many Requests` (`urn:fulwoodforge:error:rate-limit-exceeded`) with `Retry-After` header and structured JSON warning logging (`ip_rate_limit_exceeded`).
+     - Added spoof-resistant `extract_asgi_client_ip()` that only honors `CF-Connecting-IP` when the peer is verified via `is_trusted_proxy_peer` (loopback, Docker bridge, `TRUSTED_PROXY_CIDRS`).
+     - Exempted `/health`, `/health/live`, `/health/ready`, and static assets from rate limiting so cluster health monitoring is never throttled.
+     - Wired `IpRateLimitMiddleware` into FastAPI app middleware hierarchy in `backend/app/main.py`.
+  2. **Global Test Hygiene & Regression Tests:**
+     - Created `backend/tests/conftest.py` with an autouse fixture resetting `ip_rate_limiter`, `user_generation_limiter`, and `user_export_limiter` across test cases.
+     - Added unit and integration tests in `backend/tests/test_wave6_2_compliance_hardening.py` verifying rate limiting enforcement, RFC 9457 headers, health check exemption, per-IP isolation, spoof resistance, zero-limit bypass, and bounded eviction.
+  3. **Verification:**
+     - 7-Stage pipeline verified clean with zero warnings.
+
 [CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]

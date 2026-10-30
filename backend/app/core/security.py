@@ -31,7 +31,7 @@ _DOCKER_BRIDGE_NET: Final[ipaddress.IPv4Network | ipaddress.IPv6Network] = (
 )
 
 
-def _is_trusted_local_proxy_peer(peer: str) -> bool:
+def is_trusted_proxy_peer(peer: str) -> bool:
     """Only trust forwarded IP headers from loopback, Docker bridge, or explicit TRUSTED_PROXY_CIDRS."""
     if peer == "testclient":
         return True
@@ -53,6 +53,9 @@ def _is_trusted_local_proxy_peer(peer: str) -> bool:
             except ValueError:
                 continue
     return False
+
+
+_is_trusted_local_proxy_peer = is_trusted_proxy_peer
 
 
 def extract_client_ip(request: Request) -> str:

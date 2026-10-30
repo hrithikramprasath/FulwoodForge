@@ -13,12 +13,17 @@ Validates:
 from __future__ import annotations
 
 import json
+from collections import deque
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import patch
 
 import pytest
-from app.core.hardening import SecurityHeadersMiddleware
+from app.core.hardening import (
+    SecurityHeadersMiddleware,
+    extract_asgi_client_ip,
+)
+from app.core.limits import KeyedSlidingWindow, ip_rate_limiter
 from app.core.security import _is_trusted_local_proxy_peer
 from app.main import app
 from app.repositories.sessions_repo import SessionsRepository
@@ -41,6 +46,7 @@ from app.services.gemini import (
 from app.services.retry import is_transient_error
 from pydantic import ValidationError
 from starlette.testclient import TestClient
+from starlette.types import Scope
 
 from tests.test_wave2_mysql_repositories import RecordingConnection, RecordingCursor
 from tests.test_wave4_runtime_api import (
@@ -516,3 +522,162 @@ async def test_sanitise_revision_url_blocks_slopsquatting_and_canary_leak_reject
         assert safety_exc.value.status_code == 422
         assert mock_worker.call_count == 1
         assert sleep_calls == []
+
+
+def test_ip_rate_limiting_enforces_rfc9457_429_and_retry_after() -> None:
+    """Verify exceeding IP rate limit returns RFC 9457 429 problem details with Retry-After and security headers."""
+    container, _ = build_in_memory_runtime()
+    app.state.container = container
+    with (
+        patch.object(ip_rate_limiter, "default_limit", 3),
+        TestClient(app, base_url="https://testserver") as client,
+    ):
+        for _ in range(3):
+            resp = client.get("/api/auth/status")
+            assert resp.status_code == 200
+
+        resp_throttled = client.get("/api/auth/status")
+        assert resp_throttled.status_code == 429
+        assert resp_throttled.headers.get("content-type") == "application/problem+json"
+        assert resp_throttled.headers.get("cache-control") == (
+            "no-store, no-cache, must-revalidate, private"
+        )
+        assert resp_throttled.headers.get("x-content-type-options") == "nosniff"
+        assert "content-security-policy" in resp_throttled.headers
+
+        retry_after = resp_throttled.headers.get("retry-after")
+        assert retry_after is not None
+        assert int(retry_after) >= 1
+
+        body = resp_throttled.json()
+        assert body["type"] == "urn:fulwoodforge:error:rate-limit-exceeded"
+        assert body["title"] == "Rate Limit Exceeded"
+        assert (
+            body["detail"]
+            == "Too many requests from this IP address. Please wait before retrying."
+        )
+        assert body["instance"] == "/api/auth/status"
+        assert body["status"] == 429
+        assert body.get("request_id") is not None
+
+
+def test_ip_rate_limiting_exempts_health_probes_and_static_assets() -> None:
+    """Verify health probes and non-API asset paths remain unthrottled even when client IP has exceeded the limit."""
+    container, _ = build_in_memory_runtime()
+    app.state.container = container
+    with (
+        patch.object(ip_rate_limiter, "default_limit", 2),
+        TestClient(app, base_url="https://testserver") as client,
+    ):
+        for _ in range(2):
+            assert client.get("/api/auth/status").status_code == 200
+        assert client.get("/api/auth/status").status_code == 429
+
+        # Health probes must NOT be throttled
+        assert client.get("/health").status_code == 200
+        assert client.get("/health/live").status_code == 200
+        assert client.get("/health/ready").status_code == 200
+
+        # Static asset routes must NOT be throttled (returns 404 Not Found because assets are not built in tests, never 429)
+        asset_resp = client.get("/assets/index-hash.js")
+        assert asset_resp.status_code == 404
+
+
+def test_ip_rate_limiting_isolates_buckets_by_client_ip() -> None:
+    """Verify client IPs are throttled independently using trusted proxy CF-Connecting-IP."""
+    container, _ = build_in_memory_runtime()
+    app.state.container = container
+    with (
+        patch.object(ip_rate_limiter, "default_limit", 2),
+        TestClient(app, base_url="https://testserver") as client,
+    ):
+        client1_headers = {"CF-Connecting-IP": "198.51.100.10"}
+        client2_headers = {"CF-Connecting-IP": "198.51.100.20"}
+
+        # Client 1 uses its quota
+        assert (
+            client.get("/api/auth/status", headers=client1_headers).status_code == 200
+        )
+        assert (
+            client.get("/api/auth/status", headers=client1_headers).status_code == 200
+        )
+        assert (
+            client.get("/api/auth/status", headers=client1_headers).status_code == 429
+        )
+
+        # Client 2 quota is completely unconsumed
+        assert (
+            client.get("/api/auth/status", headers=client2_headers).status_code == 200
+        )
+        assert (
+            client.get("/api/auth/status", headers=client2_headers).status_code == 200
+        )
+        assert (
+            client.get("/api/auth/status", headers=client2_headers).status_code == 429
+        )
+
+
+def test_extract_asgi_client_ip_spoof_resistance() -> None:
+    """Verify extract_asgi_client_ip rejects spoofed headers from untrusted peers and accepts from trusted peers."""
+    # Untrusted client attempting to spoof CF-Connecting-IP
+    untrusted_scope: Scope = {
+        "type": "http",
+        "client": ("198.51.100.5", 54321),
+        "headers": [(b"cf-connecting-ip", b"1.1.1.1")],
+    }
+    assert extract_asgi_client_ip(untrusted_scope) == "198.51.100.5"
+
+    # Trusted client (loopback) with valid CF-Connecting-IP
+    trusted_scope: Scope = {
+        "type": "http",
+        "client": ("127.0.0.1", 54321),
+        "headers": [(b"cf-connecting-ip", b"203.0.113.77")],
+    }
+    assert extract_asgi_client_ip(trusted_scope) == "203.0.113.77"
+
+    # Trusted client with malformed header falls back to peer IP
+    trusted_malformed_scope: Scope = {
+        "type": "http",
+        "client": ("127.0.0.1", 54321),
+        "headers": [(b"cf-connecting-ip", b"invalid-ip-string")],
+    }
+    assert extract_asgi_client_ip(trusted_malformed_scope) == "127.0.0.1"
+
+    # Missing client tuple defaults to 127.0.0.1
+    no_client_scope: Scope = {
+        "type": "http",
+        "client": None,
+        "headers": [],
+    }
+    assert extract_asgi_client_ip(no_client_scope) == "127.0.0.1"
+
+
+def test_ip_rate_limiting_disabled_when_limit_zero_or_negative() -> None:
+    """Verify rate limiting is disabled when default_limit <= 0."""
+    container, _ = build_in_memory_runtime()
+    app.state.container = container
+    with (
+        patch.object(ip_rate_limiter, "default_limit", 0),
+        TestClient(app, base_url="https://testserver") as client,
+    ):
+        for _ in range(10):
+            resp = client.get("/api/auth/status")
+            assert resp.status_code == 200
+
+
+def test_keyed_sliding_window_bounded_eviction() -> None:
+    """Verify KeyedSlidingWindow bounds memory growth by purging expired keys when exceeding threshold."""
+    now = 10000.0
+    limiter = KeyedSlidingWindow(5, 60.0, "test_eviction", clock=lambda: now)
+
+    # Pre-populate 10005 keys with expired timestamps
+    for i in range(10005):
+        limiter._buckets[f"ip_{i}"] = deque([now - 120.0])  # Expired > 60s ago
+
+    assert len(limiter._buckets) == 10005
+    allowed, retry_after = limiter.check_and_record("new_active_ip")
+    assert allowed is True
+    assert retry_after == 0
+    # Expired buckets should have been purged, leaving only the newly added key
+    assert len(limiter._buckets) == 1
+    assert "new_active_ip" in limiter._buckets

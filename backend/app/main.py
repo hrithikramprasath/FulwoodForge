@@ -24,6 +24,7 @@ from app.api.lessons import router as lessons_router
 from app.core.config import load_config
 from app.core.hardening import (
     BodySizeLimitMiddleware,
+    IpRateLimitMiddleware,
     RequestContextLogMiddleware,
     SecurityHeadersMiddleware,
 )
@@ -176,6 +177,7 @@ app.add_middleware(
     ],
 )
 app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(IpRateLimitMiddleware)
 app.add_middleware(RequestContextLogMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 

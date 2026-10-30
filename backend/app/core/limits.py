@@ -67,6 +67,15 @@ class KeyedSlidingWindow:
 
         now = self._clock()
         with self._lock:
+            if len(self._buckets) > 10000:
+                expired_keys = [
+                    k
+                    for k, b in self._buckets.items()
+                    if not b or now - b[-1] >= self.seconds
+                ]
+                for k in expired_keys:
+                    self._buckets.pop(k, None)
+
             bucket = self._buckets.get(key)
             if bucket is None:
                 bucket = deque()
@@ -96,4 +105,7 @@ user_generation_limiter = KeyedSlidingWindow(
 )
 user_export_limiter = KeyedSlidingWindow(
     _int_env("EXPORT_PER_MINUTE", 20), 60.0, "export"
+)
+ip_rate_limiter = KeyedSlidingWindow(
+    _int_env("IP_RATE_LIMIT_PER_MINUTE", 120), 60.0, "ip_request"
 )

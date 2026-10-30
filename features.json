@@ -182,6 +182,24 @@
         "Code-split StudioWorkspace and AdminDashboard in frontend/src/App.tsx using React.lazy and layout-matched Suspense skeleton",
         "Comprehensive backend and frontend regression suites verifying cache headers, auth status payload minimization, and lazy boundary routing"
       ]
+    },
+    {
+      "wave": 6.4,
+      "title": "Wave 6.4: Application IP Rate Limiting & DoS Hardening",
+      "status": "completed",
+      "passes": true,
+      "requirements": [
+        "REQ-API-01",
+        "REQ-SEC-01",
+        "REQ-SEC-04"
+      ],
+      "deliverables": [
+        "Built-in KeyedSlidingWindow IP rate limiter (default 120 req/min, configurable via IP_RATE_LIMIT_PER_MINUTE) in backend/app/core/limits.py with memory-bounded LRU eviction",
+        "Pure ASGI IpRateLimitMiddleware in backend/app/core/hardening.py protecting all /api/* routes, emitting RFC 9457 application/problem+json 429 Too Many Requests with Retry-After and security headers",
+        "Spoof-resistant client IP extraction (extract_asgi_client_ip) honoring CF-Connecting-IP exclusively from verified trusted proxy peers (127.0.0.1, Docker bridge, TRUSTED_PROXY_CIDRS)",
+        "Exemption of internal Docker health probes (/health, /health/live, /health/ready) and static assets from IP rate limiting",
+        "Global pytest autouse fixture in backend/tests/conftest.py and exhaustive unit/integration tests in backend/tests/test_wave6_2_compliance_hardening.py"
+      ]
     }
   ]
 }

@@ -18,6 +18,7 @@ Provides:
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -29,6 +30,7 @@ from docx.oxml.parser import element_class_lookup
 from lxml import etree
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.core.limits import KeyedSlidingWindow, ip_rate_limiter
 from app.core.logging import (
     bind_request_context,
     clear_request_context,
@@ -37,6 +39,7 @@ from app.core.logging import (
     user_id_ctx,
     username_ctx,
 )
+from app.core.security import is_trusted_proxy_peer
 from app.core.uuid_v7 import generate_uuid7_str, uuid7_str_to_bytes
 from app.schemas.problem_details import PROBLEM_JSON_MEDIA_TYPE, build_problem_details
 
@@ -119,6 +122,7 @@ async def _send_problem_json(
     title: str,
     detail: str,
     instance: str,
+    retry_after_seconds: int | None = None,
 ) -> None:
     """Serialize and send an IETF RFC 9457 `application/problem+json` response directly over ASGI."""
     payload = build_problem_details(
@@ -130,14 +134,17 @@ async def _send_problem_json(
         request_id=request_id_ctx.get(),
     )
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    headers: list[tuple[bytes, bytes]] = [
+        (b"content-type", PROBLEM_JSON_MEDIA_TYPE.encode("ascii")),
+        (b"content-length", str(len(body)).encode("ascii")),
+    ]
+    if retry_after_seconds is not None:
+        headers.append((b"retry-after", str(int(retry_after_seconds)).encode("ascii")))
     await send(
         {
             "type": "http.response.start",
             "status": status,
-            "headers": [
-                (b"content-type", PROBLEM_JSON_MEDIA_TYPE.encode("ascii")),
-                (b"content-length", str(len(body)).encode("ascii")),
-            ],
+            "headers": headers,
         }
     )
     await send({"type": "http.response.body", "body": body})
@@ -291,12 +298,102 @@ class BodySizeLimitMiddleware:
         await self.app(scope, bounded_receive, send)
 
 
-class SecurityMiddleware:
-    """Combined ASGI middleware applying `SecurityHeadersMiddleware` around `BodySizeLimitMiddleware`."""
+def extract_asgi_client_ip(scope: Scope) -> str:
+    """Extract normalized client IP from ASGI scope, honoring CF-Connecting-IP from trusted local proxy peers."""
+    client = scope.get("client")
+    peer = (
+        str(client[0])[:45]
+        if client is not None and len(client) > 0 and client[0]
+        else "127.0.0.1"
+    )
+    if is_trusted_proxy_peer(peer):
+        headers = {k.lower(): v for k, v in (scope.get("headers") or [])}
+        raw_cf = headers.get(b"cf-connecting-ip")
+        if raw_cf:
+            try:
+                candidate = raw_cf.decode("ascii").strip()
+                return str(ipaddress.ip_address(candidate))[:45]
+            except (UnicodeDecodeError, ValueError):
+                pass
+    return peer
 
-    def __init__(self, app: ASGIApp, *, max_body_bytes: int | None = None) -> None:
+
+class IpRateLimitMiddleware:
+    """Pure ASGI middleware enforcing sliding-window rate limits per client IP on /api/* routes."""
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        limiter: KeyedSlidingWindow | None = None,
+        exempt_paths: tuple[str, ...] = (
+            "/health",
+            "/health/live",
+            "/health/ready",
+        ),
+    ) -> None:
+        self.app = app
+        self._limiter = limiter if limiter is not None else ip_rate_limiter
+        self._exempt_paths = exempt_paths
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        if self._limiter.default_limit <= 0:
+            await self.app(scope, receive, send)
+            return
+
+        path = str(scope.get("path") or "/")
+        if (
+            not (path == "/api" or path.startswith("/api/"))
+            or path in self._exempt_paths
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        ip = extract_asgi_client_ip(scope)
+        allowed, retry_after = self._limiter.check_and_record(ip)
+        if not allowed:
+            log_event(
+                logger,
+                "ip_rate_limit_exceeded",
+                "Client IP exceeded sliding-window rate limit",
+                level=logging.WARNING,
+                client_ip=ip,
+                path=path,
+                retry_after_seconds=retry_after,
+            )
+            await _send_problem_json(
+                send,
+                status=429,
+                problem_type="urn:fulwoodforge:error:rate-limit-exceeded",
+                title="Rate Limit Exceeded",
+                detail="Too many requests from this IP address. Please wait before retrying.",
+                instance=path,
+                retry_after_seconds=retry_after,
+            )
+            return
+
+        await self.app(scope, receive, send)
+
+
+class SecurityMiddleware:
+    """Combined ASGI middleware applying `SecurityHeadersMiddleware`, `IpRateLimitMiddleware`, and `BodySizeLimitMiddleware`."""
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        max_body_bytes: int | None = None,
+        ip_limiter: KeyedSlidingWindow | None = None,
+    ) -> None:
         self.app = SecurityHeadersMiddleware(
-            BodySizeLimitMiddleware(app, max_body_bytes=max_body_bytes)
+            IpRateLimitMiddleware(
+                BodySizeLimitMiddleware(app, max_body_bytes=max_body_bytes),
+                limiter=ip_limiter,
+            )
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
