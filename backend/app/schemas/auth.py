@@ -120,27 +120,35 @@ class RegisterRequest(BaseModel):
     def _extract_display_and_normalize_username(cls, data: Any) -> Any:
         if isinstance(data, dict):
             raw_username = data.get("username")
-            if isinstance(raw_username, str):
-                normalized, cased = validate_username_format(raw_username)
-                explicit_display = data.get("display_name")
-                display = (
-                    explicit_display.strip()
-                    if isinstance(explicit_display, str) and explicit_display.strip()
-                    else cased
-                )
-                return {
-                    **data,
-                    "username": normalized,
-                    "display_name": display,
-                }
+            explicit_display = data.get("display_name")
+            display = (
+                explicit_display.strip()
+                if isinstance(explicit_display, str) and explicit_display.strip()
+                else (raw_username.strip() if isinstance(raw_username, str) else "")
+            )
+            return {
+                **data,
+                "display_name": display,
+            }
         return data
+
+    @field_validator("username")
+    @classmethod
+    def _normalize_username(cls, v: str) -> str:
+        normalized, _ = validate_username_format(v)
+        return normalized
 
     @field_validator("invite_code")
     @classmethod
     def _clean_invite_code(cls, v: str | None) -> str | None:
         if v is None or not v.strip():
             return None
-        return v.strip().upper()
+        cleaned = v.strip().upper()
+        # Normalize Unicode dash variants (en-dash, em-dash, figure dash, minus sign) to standard ASCII hyphen
+        cleaned = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]", "-", cleaned)
+        # Strip zero-width, non-breaking, and invisible space characters
+        cleaned = re.sub(r"[\u200B-\u200D\uFEFF\u00A0\u202F]", "", cleaned)
+        return cleaned
 
     @model_validator(mode="after")
     def _validate_password(self) -> RegisterRequest:

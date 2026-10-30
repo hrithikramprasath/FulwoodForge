@@ -71,6 +71,16 @@ async def validation_error_handler(request: Request, exc: Exception) -> JSONResp
         loc = err.get("loc", ())
         field_name = ".".join(str(p) for p in loc if p != "body") or "body"
         reason = str(err.get("msg", "Invalid value."))[:512]
+        if field_name == "body":
+            lower_msg = reason.lower()
+            if "password" in lower_msg or "passphrase" in lower_msg:
+                field_name = "password"
+            elif "username" in lower_msg:
+                field_name = "username"
+            elif "invite" in lower_msg:
+                field_name = "invite_code"
+            elif "display" in lower_msg:
+                field_name = "display_name"
         invalid_params.append(
             InvalidParam(
                 name=field_name[:128],

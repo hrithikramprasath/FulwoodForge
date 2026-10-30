@@ -201,6 +201,27 @@ class TestAuthAndAdminSchemas:
             )
         assert any(err["type"] == "extra_forbidden" for err in exc_info.value.errors())
 
+    def test_register_request_loc_targets_username_field_on_invalid_username(
+        self,
+    ) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            RegisterRequest(
+                username="teacher@fulwood.sch.uk",
+                password="CorrectHorseBattery1!",
+            )
+        errors = exc_info.value.errors()
+        assert any(err["loc"] == ("username",) for err in errors)
+
+    def test_register_request_normalizes_unicode_hyphens_and_invisible_spaces_in_invite_code(
+        self,
+    ) -> None:
+        req = RegisterRequest(
+            username="teacher_smith",
+            password="CorrectHorseBattery1!",
+            invite_code="  FF\u2013ABCD\u20141234\u200b\u00a0 ",
+        )
+        assert req.invite_code == "FF-ABCD-1234"
+
     def test_register_request_enforces_minimum_10_char_password(self) -> None:
         with pytest.raises(ValidationError):
             RegisterRequest(

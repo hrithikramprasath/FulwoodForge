@@ -2031,3 +2031,43 @@ def test_docker_compose_mysql_84_and_oauth2_proxy_removed() -> None:
         assert svc_logging.get("driver") == "json-file"
         assert svc_logging.get("options", {}).get("max-size") == "10m"
         assert svc_logging.get("options", {}).get("max-file") == "3"
+
+
+def test_registration_validation_errors_bind_to_specific_fields() -> None:
+    """Verify registration errors bind to specific field names instead of falling back to body."""
+    container, _ = build_in_memory_runtime(
+        cookie_secure=True, registration_mode="INVITE_ONLY"
+    )
+    app.state.container = container
+
+    with TestClient(app, base_url="https://testserver") as client:
+        # 1. Invalid username (contains @)
+        r_user = client.post(
+            "/api/auth/register",
+            json={"username": "teacher@email.com", "password": "ValidPassword!2026"},
+        )
+        assert r_user.status_code == 422
+        user_params = r_user.json().get("invalid-params", [])
+        assert any(p["name"] == "username" for p in user_params), user_params
+
+        # 2. Password contains username
+        r_pass = client.post(
+            "/api/auth/register",
+            json={"username": "teacher_bob", "password": "Teacher_Bob!2026"},
+        )
+        assert r_pass.status_code == 422
+        pass_params = r_pass.json().get("invalid-params", [])
+        assert any(p["name"] == "password" for p in pass_params), pass_params
+
+        # 3. Invalid invite code under INVITE_ONLY
+        r_invite = client.post(
+            "/api/auth/register",
+            json={
+                "username": "teacher_valid",
+                "password": "ValidPassword!2026",
+                "invite_code": "NONEXISTENT_CODE",
+            },
+        )
+        assert r_invite.status_code == 422
+        invite_params = r_invite.json().get("invalid-params", [])
+        assert any(p["name"] == "invite_code" for p in invite_params), invite_params

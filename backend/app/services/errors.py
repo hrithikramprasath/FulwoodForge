@@ -167,7 +167,10 @@ class InvalidInviteCodeError(ServiceError):
         self,
         detail: str = "A valid, active invite code is required to register.",
     ) -> None:
-        super().__init__(detail)
+        super().__init__(
+            detail,
+            invalid_params=[InvalidParam(name="invite_code", reason=detail)],
+        )
 
 
 class RateLimitExceededError(ServiceError):
