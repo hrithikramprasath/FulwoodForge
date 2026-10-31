@@ -21,7 +21,7 @@
 - **REQ-AUTH-03 (Brute-Force Rate Limiting):** IF a client submits more than `5` failed login attempts within a `15-minute` sliding window for the same `(username, ip_address)` pair, THEN THE SYSTEM SHALL reject subsequent login attempts with HTTP `429 Too Many Requests` (`application/problem+json`) and record a `LOGIN_RATE_LIMITED` row in `audit_events`.
 
 ### 2.2 Registration Abuse Gate (`INVITE_ONLY`, `ADMIN_APPROVAL`, `OPEN`)
-- **REQ-AUTH-04 (Registration Mode Enforcement):** WHEN `POST /api/auth/register` is invoked, THE SYSTEM SHALL inspect `system_settings.registration_mode`:
+- **REQ-AUTH-04 (Registration Mode Enforcement):** WHEN `POST /api/auth/register` is invoked, THE SYSTEM SHALL first enforce per-IP registration sliding-window rate limiting (10 requests per 15 minutes via `ip_registration_limiter`), validate `system_settings.registration_mode`, verify `req.invite_code` presence and validity (under `INVITE_ONLY`), and confirm `req.username` uniqueness *before* invoking Argon2id password hashing (`hash_password`), without holding open database transaction locks across the CPU-bound hashing computation:
   1. **WHILE `registration_mode = 'INVITE_ONLY'` (Default):** THE SYSTEM SHALL require a valid, active, un-expired `invite_code` from `invite_codes` where `uses_count < max_uses`, atomically increment `uses_count` via `SELECT ... FOR UPDATE`, and create the user with `status = 'ACTIVE'`.
   2. **WHILE `registration_mode = 'ADMIN_APPROVAL'`:** THE SYSTEM SHALL create the user account with `status = 'PENDING'` and return HTTP `202 Accepted` instructing the teacher that an Administrator must approve the account before sign-in.
   3. **WHILE `registration_mode = 'OPEN'`:** THE SYSTEM SHALL create the user account with `status = 'ACTIVE'`.
@@ -211,6 +211,7 @@ CREATE TABLE audit_events (
    - THE SYSTEM SHALL scope generation rate limits (`users.hourly_generation_limit`) and export rate limits (`20/min`) strictly by authenticated `user_id` (never process-global), and SHALL check recent `lesson_generations` cache hits *before* consuming a user's hourly Gemini generation quota.
 4. **REQ-SEC-04 (`VULN-04` — Fail-Closed Native Session Auth):**
    - THE SYSTEM SHALL authenticate all `/api/*` endpoints (except `/api/auth/login`, `/api/auth/register`, `/api/auth/status`, `/health/live`, `/health/ready`) exclusively via the `ff_session` database-backed session cookie. `oauth2-proxy` and `X-Forwarded-Email` trust SHALL be completely removed.
+   - State-mutating authentication entrypoints (`POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout`) SHALL enforce `Origin` and `Sec-Fetch-Site` CSRF verification (`verify_request_csrf(..., has_cookie=True)`), rejecting cross-origin and untrusted requests with HTTP 403 Forbidden (`application/problem+json`).
 5. **REQ-SEC-05 (`VULN-05` — Safe XML Deserialization Everywhere):**
    - THE SYSTEM SHALL route 100% of XML parsing in `docx_writer.py`, `pptx_writer.py`, `omml.py`, and `export.py` through `safe_xml_fromstring()` (`resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False`). Raw `docx.oxml.parse_xml()` on Pandoc output and `xml.etree.ElementTree.fromstring()` SHALL be removed.
 6. **REQ-SEC-06 (`VULN-06` — Non-Blocking Async Subprocess & Database Execution):**

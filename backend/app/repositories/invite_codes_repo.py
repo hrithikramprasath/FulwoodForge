@@ -68,6 +68,25 @@ WHERE code = %s
 FOR UPDATE
 """
 
+_SELECT_ACTIVE_CODE_SQL = """
+SELECT
+    id,
+    uuid_v7,
+    code,
+    max_uses,
+    uses_count,
+    expires_at,
+    created_by_user_id,
+    is_active,
+    created_at
+FROM invite_codes
+WHERE code = %s
+  AND is_active = 1
+  AND uses_count < max_uses
+  AND (expires_at IS NULL OR expires_at > %s)
+LIMIT 1
+"""
+
 _INCREMENT_USES_SQL = """
 UPDATE invite_codes
 SET uses_count = uses_count + 1
@@ -209,6 +228,25 @@ class InviteCodesRepository:
                         "Failed to retrieve newly created invite_code row"
                     )
                 return _hydrate_invite_row(row).to_dto()
+        except Exception as exc:
+            raise classify_mysql_exception(exc) from exc
+
+    async def get_active_code(
+        self,
+        conn: AsyncConnectionProtocol,
+        code: str,
+        now_utc: datetime,
+    ) -> InviteCodeRow | None:
+        """Fetch an active, un-expired invite code with remaining capacity without row locking."""
+        normalized_code = code.strip().upper()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    _SELECT_ACTIVE_CODE_SQL,
+                    (normalized_code, to_mysql_utc(now_utc)),
+                )
+                row = await cur.fetchone()
+                return _hydrate_invite_row(row) if row is not None else None
         except Exception as exc:
             raise classify_mysql_exception(exc) from exc
 

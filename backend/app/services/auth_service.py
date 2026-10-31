@@ -21,6 +21,7 @@ import argon2
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 from app.core.config import AppConfig
+from app.core.limits import KeyedSlidingWindow, ip_registration_limiter
 from app.core.uuid_v7 import uuid7_str_to_bytes
 from app.db.errors import UniqueConstraintViolationError
 from app.db.pool import AsyncDatabasePool
@@ -103,6 +104,7 @@ class AuthService:
         settings_repo: SystemSettingsRepository | None = None,
         telemetry_repo: TelemetryRepository | None = None,
         clock: Callable[[], datetime] | None = None,
+        registration_limiter: KeyedSlidingWindow | None = None,
     ) -> None:
         self._pool = pool
         self._config = config
@@ -112,6 +114,7 @@ class AuthService:
         self._settings_repo = settings_repo or SystemSettingsRepository()
         self._telemetry_repo = telemetry_repo or TelemetryRepository()
         self._clock: Callable[[], datetime] = clock or (lambda: datetime.now(UTC))
+        self._registration_limiter = registration_limiter or ip_registration_limiter
 
     @staticmethod
     def hash_password(plaintext: str) -> str:
@@ -129,7 +132,38 @@ class AuthService:
         ip_address: str = "127.0.0.1",
     ) -> AuthenticatedUserDTO:
         """Register a new teacher account enforcing the active `registration_mode` (`REQ-AUTH-04`)."""
+        allowed, retry_after = self._registration_limiter.check_and_record(ip_address)
+        if not allowed:
+            logger.warning("Registration rate limit exceeded for ip=%s", ip_address)
+            raise RateLimitExceededError(
+                f"Too many registration attempts from this IP address. Please wait {retry_after} seconds.",
+                retry_after_seconds=retry_after,
+            )
+
         now_utc = self._clock()
+
+        # Fast read pre-check before expensive Argon2id password hashing
+        async with self._pool.connection() as conn:
+            settings = await self._settings_repo.get_or_init_settings(conn)
+
+            existing = await self._users_repo.get_by_username(conn, req.username)
+            if existing is not None:
+                raise ConflictError(f"Username '{req.username}' is already registered.")
+
+            if settings.registration_mode == "INVITE_ONLY":
+                if not req.invite_code:
+                    raise InvalidInviteCodeError(
+                        "An invite code is required to register while Invite-Only mode is active."
+                    )
+                invite_check = await self._invite_repo.get_active_code(
+                    conn, req.invite_code, now_utc
+                )
+                if invite_check is None:
+                    raise InvalidInviteCodeError(
+                        "The provided invite code is invalid, expired, or has reached its maximum uses."
+                    )
+
+        # Compute 64 MiB Argon2id hash outside the database lock
         password_hash = await asyncio.to_thread(self.hash_password, req.password)
 
         async with self._pool.transaction() as conn:

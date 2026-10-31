@@ -23,13 +23,18 @@ from app.core.hardening import (
     SecurityHeadersMiddleware,
     extract_asgi_client_ip,
 )
-from app.core.limits import KeyedSlidingWindow, ip_rate_limiter
+from app.core.limits import (
+    KeyedSlidingWindow,
+    ip_rate_limiter,
+    ip_registration_limiter,
+)
 from app.core.security import _is_trusted_local_proxy_peer
 from app.main import app
 from app.repositories.sessions_repo import SessionsRepository
 from app.repositories.telemetry_repo import TelemetryRepository
 from app.schemas.auth import ChangePasswordRequest, LoginRequest, RegisterRequest
 from app.schemas.content import RevisionResource, TeacherRequest
+from app.services.auth_service import AuthService
 from app.services.errors import (
     AuthenticationError,
     RateLimitExceededError,
@@ -681,3 +686,226 @@ def test_keyed_sliding_window_bounded_eviction() -> None:
     # Expired buckets should have been purged, leaving only the newly added key
     assert len(limiter._buckets) == 1
     assert "new_active_ip" in limiter._buckets
+
+
+def test_registration_pre_check_avoids_argon2id_hashing_on_invalid_invite_or_duplicate_user() -> (
+    None
+):
+    """Verify register_user never executes CPU/memory-bound Argon2id hashing on missing/invalid invite code or duplicate user."""
+    container, _ = build_in_memory_runtime(
+        cookie_secure=True, registration_mode="INVITE_ONLY"
+    )
+    app.state.container = container
+
+    with TestClient(app, base_url="https://testserver") as client:
+        # Case 1: Missing invite code in INVITE_ONLY mode
+        with patch.object(AuthService, "hash_password") as mock_hash:
+            resp = client.post(
+                "/api/auth/register",
+                json={
+                    "username": "teacher_no_invite",
+                    "password": "ValidPassword!2026",
+                },
+            )
+            assert resp.status_code == 422
+            assert resp.headers["content-type"].startswith("application/problem+json")
+            assert resp.json()["type"] == "urn:fulwoodforge:error:invalid-invite-code"
+            assert mock_hash.call_count == 0
+
+        # Case 2: Invalid/exhausted invite code in INVITE_ONLY mode
+        with patch.object(AuthService, "hash_password") as mock_hash:
+            resp = client.post(
+                "/api/auth/register",
+                json={
+                    "username": "teacher_bad_invite",
+                    "password": "ValidPassword!2026",
+                    "invite_code": "DOES-NOT-EXIST",
+                },
+            )
+            assert resp.status_code == 422
+            assert resp.headers["content-type"].startswith("application/problem+json")
+            assert resp.json()["type"] == "urn:fulwoodforge:error:invalid-invite-code"
+            assert mock_hash.call_count == 0
+
+        # Create valid invite code as admin, then register teacher_one
+        admin_login = client.post(
+            "/api/auth/login",
+            json={
+                "username": "admin",
+                "password": "BootstrapAdminPassword!2026",
+            },
+        )
+        assert admin_login.status_code == 200
+        inv_resp = client.post(
+            "/api/admin/invite-codes",
+            json={
+                "code": "FF-PRECHECK-2026",
+                "max_uses": 5,
+                "expires_in_hours": 24,
+            },
+        )
+        assert inv_resp.status_code == 201
+
+        reg_success = client.post(
+            "/api/auth/register",
+            json={
+                "username": "teacher_unique",
+                "password": "ValidPassword!2026",
+                "invite_code": "FF-PRECHECK-2026",
+            },
+        )
+        assert reg_success.status_code == 201
+
+        # Case 3: Duplicate username pre-check rejects before hashing
+        with patch.object(AuthService, "hash_password") as mock_hash:
+            resp = client.post(
+                "/api/auth/register",
+                json={
+                    "username": "teacher_unique",
+                    "password": "ValidPassword!2026",
+                    "invite_code": "FF-PRECHECK-2026",
+                },
+            )
+            assert resp.status_code == 409
+            assert resp.headers["content-type"].startswith("application/problem+json")
+            assert resp.json()["type"] == "urn:fulwoodforge:error:conflict"
+            assert mock_hash.call_count == 0
+
+
+def test_registration_per_ip_rate_limiting() -> None:
+    """Verify flooding POST /api/auth/register from the same IP returns HTTP 429 with Retry-After header."""
+    container, _ = build_in_memory_runtime(cookie_secure=True, registration_mode="OPEN")
+    app.state.container = container
+
+    with (
+        patch.object(ip_registration_limiter, "default_limit", 3),
+        TestClient(app, base_url="https://testserver") as client,
+    ):
+        target_ip_headers = {"cf-connecting-ip": "203.0.113.88"}
+        # 3 requests within quota should succeed
+        for i in range(3):
+            resp = client.post(
+                "/api/auth/register",
+                json={
+                    "username": f"teacher_flood_{i}",
+                    "password": "ValidPassword!2026",
+                },
+                headers=target_ip_headers,
+            )
+            assert resp.status_code == 201
+
+        # 4th request from same IP should be blocked with 429
+        blocked = client.post(
+            "/api/auth/register",
+            json={
+                "username": "teacher_flood_exceeded",
+                "password": "ValidPassword!2026",
+            },
+            headers=target_ip_headers,
+        )
+        assert blocked.status_code == 429
+        assert blocked.headers["content-type"].startswith("application/problem+json")
+        assert blocked.json()["type"] == "urn:fulwoodforge:error:rate-limit-exceeded"
+        assert "retry-after" in blocked.headers
+        assert int(blocked.headers["retry-after"]) > 0
+
+        # Different IP is not throttled
+        diff_ip_headers = {"cf-connecting-ip": "203.0.113.89"}
+        diff_resp = client.post(
+            "/api/auth/register",
+            json={
+                "username": "teacher_diff_ip",
+                "password": "ValidPassword!2026",
+            },
+            headers=diff_ip_headers,
+        )
+        assert diff_resp.status_code == 201
+
+
+def test_auth_endpoints_csrf_protection_login_and_register() -> None:
+    """Verify POST /api/auth/login and POST /api/auth/register reject cross-site and untrusted origin headers with 403."""
+    container, _ = build_in_memory_runtime(cookie_secure=True, registration_mode="OPEN")
+    app.state.container = container
+
+    with TestClient(app, base_url="https://testserver") as client:
+        # 1. Login with untrusted Origin header -> 403
+        bad_origin_login = client.post(
+            "/api/auth/login",
+            json={
+                "username": "admin",
+                "password": "BootstrapAdminPassword!2026",
+            },
+            headers={"Origin": "https://evil.example.com"},
+        )
+        assert bad_origin_login.status_code == 403
+        assert bad_origin_login.headers["content-type"].startswith(
+            "application/problem+json"
+        )
+        assert bad_origin_login.json()["type"] == "urn:fulwoodforge:error:forbidden"
+
+        # 2. Login with cross-site Sec-Fetch-Site -> 403
+        bad_site_login = client.post(
+            "/api/auth/login",
+            json={
+                "username": "admin",
+                "password": "BootstrapAdminPassword!2026",
+            },
+            headers={"Sec-Fetch-Site": "cross-site"},
+        )
+        assert bad_site_login.status_code == 403
+        assert bad_site_login.headers["content-type"].startswith(
+            "application/problem+json"
+        )
+        assert bad_site_login.json()["type"] == "urn:fulwoodforge:error:forbidden"
+
+        # 3. Register with untrusted Origin header -> 403
+        bad_origin_reg = client.post(
+            "/api/auth/register",
+            json={
+                "username": "teacher_csrf_test",
+                "password": "ValidPassword!2026",
+            },
+            headers={"Origin": "https://evil.example.com"},
+        )
+        assert bad_origin_reg.status_code == 403
+        assert bad_origin_reg.headers["content-type"].startswith(
+            "application/problem+json"
+        )
+        assert bad_origin_reg.json()["type"] == "urn:fulwoodforge:error:forbidden"
+
+        # 4. Register with cross-site Sec-Fetch-Site -> 403
+        bad_site_reg = client.post(
+            "/api/auth/register",
+            json={
+                "username": "teacher_csrf_test2",
+                "password": "ValidPassword!2026",
+            },
+            headers={"Sec-Fetch-Site": "cross-site"},
+        )
+        assert bad_site_reg.status_code == 403
+        assert bad_site_reg.headers["content-type"].startswith(
+            "application/problem+json"
+        )
+        assert bad_site_reg.json()["type"] == "urn:fulwoodforge:error:forbidden"
+
+        # 5. Same-origin Origin header succeeds on login
+        good_login = client.post(
+            "/api/auth/login",
+            json={
+                "username": "admin",
+                "password": "BootstrapAdminPassword!2026",
+            },
+            headers={"Origin": "https://testserver"},
+        )
+        assert good_login.status_code == 200
+
+        # 6. Same-origin Origin header succeeds on register
+        good_reg = client.post(
+            "/api/auth/register",
+            json={
+                "username": "teacher_csrf_valid",
+                "password": "ValidPassword!2026",
+            },
+            headers={"Origin": "https://testserver"},
+        )
+        assert good_reg.status_code == 201

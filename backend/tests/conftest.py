@@ -7,6 +7,7 @@ from collections.abc import Generator
 import pytest
 from app.core.limits import (
     ip_rate_limiter,
+    ip_registration_limiter,
     user_export_limiter,
     user_generation_limiter,
 )
@@ -16,11 +17,13 @@ from app.core.limits import (
 def reset_global_rate_limiters() -> Generator[None, None, None]:
     """Reset in-memory sliding window rate limiters before and after each test."""
     ip_rate_limiter.reset()
+    ip_registration_limiter.reset()
     user_generation_limiter.reset()
     user_export_limiter.reset()
     try:
         yield
     finally:
         ip_rate_limiter.reset()
+        ip_registration_limiter.reset()
         user_generation_limiter.reset()
         user_export_limiter.reset()

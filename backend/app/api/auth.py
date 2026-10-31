@@ -66,6 +66,7 @@ async def register_user(
     client_ip: Annotated[str, Depends(get_client_ip)],
 ) -> AuthStatusResponse:
     """Register a new teacher account according to system_settings.registration_mode."""
+    verify_request_csrf(request, has_cookie=True)
     user_dto = await auth_service.register_user(payload, ip_address=client_ip)
     username_ctx.set(user_dto.username)
     request.state.username = user_dto.username
@@ -103,6 +104,7 @@ async def login_user(
     client_ip: Annotated[str, Depends(get_client_ip)],
 ) -> AuthenticatedUserDTO:
     """Authenticate username/password credentials and issue an HttpOnly ff_session cookie."""
+    verify_request_csrf(request, has_cookie=True)
     user_agent = request.headers.get("user-agent", "")[:255]
     raw_token, user_dto = await auth_service.login_user(
         payload,

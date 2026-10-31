@@ -29,7 +29,11 @@ import yaml
 from app.api.deps import RuntimeContainer
 from app.core.config import AppConfig
 from app.core.hardening import STRICT_CSP
-from app.core.limits import user_export_limiter, user_generation_limiter
+from app.core.limits import (
+    ip_registration_limiter,
+    user_export_limiter,
+    user_generation_limiter,
+)
 from app.core.logging import StructuredJsonFormatter
 from app.core.uuid_v7 import (
     generate_uuid7_bytes,
@@ -635,6 +639,14 @@ class InMemoryInviteCodesRepo:
         self._store.invites[iid] = row
         return row.to_dto()
 
+    async def get_active_code(
+        self,
+        _conn: AsyncConnectionProtocol,
+        code: str,
+        now_utc: datetime | None = None,
+    ) -> InviteCodeRow | None:
+        return await self.get_active_for_update(_conn, code, now_utc)
+
     async def get_active_for_update(
         self,
         _conn: AsyncConnectionProtocol,
@@ -1154,6 +1166,7 @@ def build_in_memory_runtime(
     """Create a wired RuntimeContainer + InMemoryStore for HTTP tests."""
     user_export_limiter.reset()
     user_generation_limiter.reset()
+    ip_registration_limiter.reset()
 
     config = make_test_config(cookie_secure=cookie_secure)
     store = InMemoryStore(

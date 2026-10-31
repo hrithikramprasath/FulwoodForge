@@ -109,3 +109,6 @@ user_export_limiter = KeyedSlidingWindow(
 ip_rate_limiter = KeyedSlidingWindow(
     _int_env("IP_RATE_LIMIT_PER_MINUTE", 120), 60.0, "ip_request"
 )
+ip_registration_limiter = KeyedSlidingWindow(
+    _int_env("IP_REGISTRATION_LIMIT_PER_15_MIN", 10), 900.0, "ip_registration"
+)

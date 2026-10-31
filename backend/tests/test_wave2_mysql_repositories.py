@@ -642,7 +642,7 @@ async def test_invite_codes_repository_for_update() -> None:
     )
     cursor = RecordingCursor(
         lastrowid=3,
-        fetchone_queue=[invite_tuple, invite_tuple],
+        fetchone_queue=[invite_tuple, invite_tuple, invite_tuple],
         rowcount_queue=[1, 1, 1],
     )
     conn = RecordingConnection(cursor)
@@ -658,6 +658,15 @@ async def test_invite_codes_repository_for_update() -> None:
     )
     assert created_dto.uuid == uuid7_bytes_to_str(invite_uuid)
     assert created_dto.code == "FULWOOD-MATHS-2026"
+
+    active_pre = await repo.get_active_code(
+        conn,
+        code="FULWOOD-MATHS-2026",
+        now_utc=datetime(2026, 10, 17, 10, 0, 0, tzinfo=UTC),
+    )
+    assert active_pre is not None
+    assert active_pre.id == 3
+    assert any("LIMIT 1" in q and "FOR UPDATE" not in q for q, _ in cursor.executed)
 
     locked = await repo.get_active_for_update(
         conn,

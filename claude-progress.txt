@@ -173,3 +173,28 @@
      - 7-Stage pipeline verified clean with zero warnings.
 
 [CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]
+
+## [2026-10-31T14:35:00+01:00] - Wave 6.5: Auth Hardening & Dependency Vulnerability Remediation (COMPLETED)
+- **Status:** COMPLETE (`passes: true`); `./init.sh` from repo root exits 0 across all 7 stages (109 backend pytest tests with 15 subtests, 16 deploy unit tests, 21 frontend vitest tests, 0 mypy/ruff/eslint/prettier errors, production build clean).
+- **Completed Hardening Deliverables:**
+  1. **Pre-Validation Argon2id CPU/RAM Exhaustion Defense (`backend/app/services/auth_service.py` & `backend/app/repositories/invite_codes_repo.py`):**
+     - Re-architected `AuthService.register_user` to pre-check per-IP registration quotas (`ip_registration_limiter`), active `registration_mode`, `invite_code` presence/validity (via fast non-locking `get_active_code`), and `username` uniqueness *before* invoking `await asyncio.to_thread(self.hash_password, req.password)`.
+     - Invalid/missing invite codes in `INVITE_ONLY` mode (422) and duplicate usernames (409) terminate immediately with zero calls to `hash_password`, preventing concurrent 64 MiB RAM allocation DoS.
+     - Argon2id password hashing executes outside database transactions, eliminating held row locks during CPU/RAM computation before atomic `SELECT ... FOR UPDATE` consumption.
+  2. **Per-IP Registration Sliding-Window Rate Limiting (`backend/app/core/limits.py`):**
+     - Initialized `ip_registration_limiter = KeyedSlidingWindow(_int_env("IP_REGISTRATION_LIMIT_PER_15_MIN", 10), 900.0, "ip_registration")`.
+     - Added automatic limiter reset in `backend/tests/conftest.py` and `backend/tests/test_wave4_runtime_api.py`.
+     - Rejections emit RFC 9457 `application/problem+json` `HTTP 429 Too Many Requests` (`urn:fulwoodforge:error:rate-limit-exceeded`) with `Retry-After` header.
+  3. **Login & Registration CSRF Enforcement (`backend/app/api/auth.py`):**
+     - Enforced `verify_request_csrf(request, has_cookie=True)` on both `POST /api/auth/register` and `POST /api/auth/login`.
+     - Any state-mutating authentication request carrying cross-site `Sec-Fetch-Site: cross-site` or an untrusted `Origin` header is rejected with HTTP 403 Forbidden (`application/problem+json`).
+  4. **GitHub Dependabot 5 Package Vulnerabilities Remediated (`backend/uv.lock` & `frontend/package.json`):**
+     - Upgraded `pyasn1` from `0.6.4` to `0.6.5` in `backend/uv.lock`, closing 4 high-severity vulnerabilities (Alerts 68, 69, 70, 71: CVE-2026-119193, CVE-2026-119194, CVE-2026-119195, CVE-2026-119196).
+     - Applied `"overrides": {"minimatch": "^11.0.3"}` in `frontend/package.json` (installed `minimatch@11.0.3`), closing 1 medium-severity vulnerability (Alert 72: CVE-2026-118764 / GHSA-g3hv-75wg-m249).
+     - Clean `npm audit` reporting 0 vulnerabilities.
+  5. **Comprehensive Regression Suite & Full Verification:**
+     - Added tests in `backend/tests/test_wave6_2_compliance_hardening.py` asserting zero `hash_password` calls on invalid invite/duplicate user, 429 rate limiting with Retry-After on registration flooding, and 403 CSRF rejections.
+     - Added `get_active_code` unit coverage in `backend/tests/test_wave2_mysql_repositories.py`.
+     - Synchronized `SPEC.md` (`REQ-AUTH-04`, `REQ-SEC-04`), `SECURITY.md` (Section 1), and `features.json`.
+
+[CANARY: MYSQL-8.4-ANTI-VIBE-LOCKED]
