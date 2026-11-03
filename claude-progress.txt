@@ -189,7 +189,7 @@
      - Enforced `verify_request_csrf(request, has_cookie=True)` on both `POST /api/auth/register` and `POST /api/auth/login`.
      - Any state-mutating authentication request carrying cross-site `Sec-Fetch-Site: cross-site` or an untrusted `Origin` header is rejected with HTTP 403 Forbidden (`application/problem+json`).
   4. **GitHub Dependabot 5 Package Vulnerabilities Remediated (`backend/uv.lock` & `frontend/package.json`):**
-     - Upgraded `pyasn1` from `0.6.4` to `0.6.5` in `backend/uv.lock`, closing 4 high-severity vulnerabilities (Alerts 68, 69, 70, 71: CVE-2026-119193, CVE-2026-119194, CVE-2026-119195, CVE-2026-119196).
+     - Upgraded `pyasn1` from `0.6.4` to `0.6.5` in `backend/uv.lock` and explicitly pinned `pyasn1>=0.6.5` in `backend/pyproject.toml`, closing 4 high-severity vulnerabilities (Alerts 68, 69, 70, 71: CVE-2026-119193, CVE-2026-119194, CVE-2026-119195, CVE-2026-119196).
      - Applied `"overrides": {"minimatch": "^11.0.3"}` in `frontend/package.json` (installed `minimatch@11.0.3`), closing 1 medium-severity vulnerability (Alert 72: CVE-2026-118764 / GHSA-g3hv-75wg-m249).
      - Clean `npm audit` reporting 0 vulnerabilities.
   5. **Comprehensive Regression Suite & Full Verification:**

@@ -216,7 +216,7 @@
         "Pre-validation Argon2id CPU/RAM exhaustion defense in AuthService.register_user validating IP quota, mode, invite codes, and username uniqueness before computing 64 MiB password hash without transaction locks",
         "Per-IP registration sliding window rate limiter (ip_registration_limiter, default 10 per 15 minutes) in backend/app/core/limits.py",
         "State-mutating CSRF origin and Sec-Fetch-Site validation enforced on POST /api/auth/login and POST /api/auth/register",
-        "Remediated 5 GitHub Dependabot package vulnerabilities via pyasn1 v0.6.5 upgrade in backend/uv.lock (alerts 68-71) and minimatch v11.0.3 override in frontend/package.json (alert 72)",
+        "Remediated 5 GitHub Dependabot package vulnerabilities via pyasn1 v0.6.5 upgrade in backend/uv.lock and explicit pyasn1>=0.6.5 pin in backend/pyproject.toml (alerts 68-71) and minimatch v11.0.3 override in frontend/package.json (alert 72)",
         "Exhaustive unit and regression tests in backend/tests/test_wave6_2_compliance_hardening.py verifying zero hashing on invalid inputs, 429 Retry-After rate limits, and 403 CSRF rejections"
       ]
     }
