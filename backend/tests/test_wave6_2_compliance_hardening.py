@@ -13,12 +13,15 @@ Validates:
 from __future__ import annotations
 
 import json
+import tomllib
 from collections import deque
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+import yaml
 from app.core.hardening import (
     SecurityHeadersMiddleware,
     extract_asgi_client_ip,
@@ -909,3 +912,83 @@ def test_auth_endpoints_csrf_protection_login_and_register() -> None:
             headers={"Origin": "https://testserver"},
         )
         assert good_reg.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_security_headers_middleware_preserves_existing_assets_cache_control() -> (
+    None
+):
+    """Verify SecurityHeadersMiddleware does not duplicate or overwrite existing Cache-Control on /assets/*."""
+    captured: list[tuple[bytes, bytes]] = []
+
+    async def dummy_app(scope: Any, receive: Any, send: Any) -> None:
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"cache-control", b"no-store")],
+            }
+        )
+        await send({"type": "http.response.body", "body": b""})
+
+    async def capture_send(message: Any) -> None:
+        if message["type"] == "http.response.start":
+            captured.extend(message.get("headers", []))
+
+    async def dummy_receive() -> dict[str, Any]:
+        return {"type": "http.request"}
+
+    middleware = SecurityHeadersMiddleware(dummy_app)
+    await middleware(
+        {"type": "http", "path": "/assets/index-hash.js", "method": "GET"},
+        dummy_receive,
+        capture_send,
+    )
+    cache_headers = [val for key, val in captured if key.lower() == b"cache-control"]
+    assert cache_headers == [b"no-store"]
+
+
+def test_pyproject_security_dependency_floors_and_codeql_sarif_mapping() -> None:
+    """Verify explicit vulnerability floors in pyproject.toml/uv.lock and valid CodeQL SARIF paths."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    pyproject = tomllib.loads(
+        (repo_root / "backend" / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    deps: list[str] = pyproject["project"]["dependencies"]
+    assert "certifi>=2026.10.23" in deps
+    assert "pillow>=13.0.0" in deps
+    assert "pyasn1>=0.6.5" in deps
+
+    lock = tomllib.loads(
+        (repo_root / "backend" / "uv.lock").read_text(encoding="utf-8")
+    )
+    locked_versions = {
+        pkg["name"]: pkg["version"]
+        for pkg in lock.get("package", [])
+        if "version" in pkg
+    }
+    pillow_ver = tuple(int(part) for part in locked_versions["pillow"].split(".")[:3])
+    assert pillow_ver >= (13, 0, 0)
+
+    codeql = yaml.safe_load(
+        (repo_root / ".github" / "workflows" / "codeql.yml").read_text(encoding="utf-8")
+    )
+    job = codeql["jobs"]["analyze"]
+    matrix_entries = job["strategy"]["matrix"]["include"]
+    sarif_map = {entry["language"]: entry["sarif-language"] for entry in matrix_entries}
+    assert sarif_map == {
+        "javascript-typescript": "javascript",
+        "python": "python",
+    }
+    steps_by_name = {step["name"]: step for step in job["steps"]}
+    assert (
+        steps_by_name["Upload Code Scanning Results to Security Tab (If Permitted)"][
+            "with"
+        ]["sarif_file"]
+        == "sarif-results/${{ matrix.sarif-language }}.sarif"
+    )
+    assert (
+        steps_by_name["Upload SARIF Report as CI Artifact"]["with"]["path"]
+        == "sarif-results/${{ matrix.sarif-language }}.sarif"
+    )

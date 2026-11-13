@@ -16,6 +16,8 @@ dependencies = [
     # retryable. Already present transitively via google-genai; declared so it is not
     # an undeclared import.
     "httpx>=0.28.1",
+    # Pinned to >=13.0.0 to enforce remediation of libtiff encoder memory disclosure and segfault (CVE-2026-112902 / GHSA-xvh5-g6gv-559v).
+    "pillow>=13.0.0",
     "playwright>=1.61.0",
     # Pinned to >=0.6.5 to enforce remediation of BER/CER/DER decoder DoS vulnerabilities (CVE-2026-119193..119197).
     "pyasn1>=0.6.5",

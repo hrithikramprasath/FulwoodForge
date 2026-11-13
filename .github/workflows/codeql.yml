@@ -23,36 +23,39 @@ jobs:
       matrix:
         include:
           - language: javascript-typescript
+            sarif-language: javascript
             build-mode: none
           - language: python
+            sarif-language: python
             build-mode: none
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           category: "/language:${{ matrix.language }}"
           upload: false
           output: "sarif-results"
 
       - name: Upload Code Scanning Results to Security Tab (If Permitted)
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         continue-on-error: true
         with:
-          sarif_file: "sarif-results/${{ matrix.language }}.sarif"
+          sarif_file: "sarif-results/${{ matrix.sarif-language }}.sarif"
           category: "/language:${{ matrix.language }}"
 
       - name: Upload SARIF Report as CI Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: codeql-${{ matrix.language }}-sarif
-          path: "sarif-results/${{ matrix.language }}.sarif"
+          path: "sarif-results/${{ matrix.sarif-language }}.sarif"
+          if-no-files-found: error
