@@ -1,28 +1,16 @@
 # Security Policy
 
+> **Notice: Archived & Unmaintained Repository**
+> This repository is archived and no longer actively maintained. Security updates, triage, and patches are not provided.
+
 ## Supported Versions
 
-The following versions of Fulwood Forge are actively maintained with security updates:
+No versions of Fulwood Forge are actively maintained:
 
 | Version | Supported |
 | ------- | --------- |
-| Latest (`main` branch) | Yes |
+| Latest (`main` branch) | No (Archived) |
 
 ## Reporting a Vulnerability
 
-We take the security of Fulwood Forge seriously. If you discover a vulnerability or security flaw, please report it responsibly.
-
-### How to Report
-
-- **Do NOT open a public GitHub issue.**
-- Report the vulnerability privately using [GitHub Private Vulnerability Reporting](https://github.com/hrithikramprasath/FulwoodForge/security/advisories/new).
-- Provide a detailed description of the vulnerability, including:
-  - Affected components or endpoints
-  - Step-by-step reproduction instructions or proof-of-concept
-  - Estimated impact and potential attack scenarios
-
-### Response Timeline
-
-- **Acknowledgment:** Within 48 hours of initial receipt.
-- **Triage & Assessment:** Within 5 business days.
-- **Fix & Disclosure:** Security fixes will be developed, tested, and released as priority patches before public disclosure.
+This project is provided as an archived reference only and is not monitored for vulnerability reports. If you still wish to leave a note for archival visibility, you may use [GitHub Private Vulnerability Reporting](https://github.com/hrithikramprasath/FulwoodForge/security/advisories/new), though responses and fixes are not provided.
