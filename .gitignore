@@ -25,6 +25,7 @@ __pycache__/
 # OS / editor
 .DS_Store
 Thumbs.db
+.obsidian/
 
 # Runtime data & build archives — never commit
 artifacts/

@@ -1,5 +1,8 @@
 # Fulwood Forge
 
+> **Notice: Archived & Unmaintained Repository**
+> This repository is archived and no longer actively maintained. It is provided for reference and educational purposes only. Issues, pull requests, and ongoing security updates are not monitored or provided.
+
 A secondary school curriculum resource studio that turns a teacher's pedagogical configuration into a lesson-ready **worksheet, PowerPoint, or multi-lesson booklet** in the Fulwood Academy format, with the teacher mark scheme generated as a separate export.
 
 Output follows the **Fulwood lesson spine** — Do It Now -> key spellings -> keyword bank -> I DO -> misconception check -> WE DO -> YOU DO -> exam language coach -> exam questions -> exit ticket — with mathematics typeset as native Office Open XML Math (OMML) in Word/PowerPoint and KaTeX in PDF and browser previews.
